@@ -189,8 +189,9 @@ suppressPackageStartupMessages({
 
 compute_mun_month_prices <- function(
   balanced_panel_files,
-  out_path = "data/analysis/mun_month_prices/mun_month_prices.parquet",
-  mun_shp  = "data/map/inegi_mg_2024/unzipped/ONLY_MUNICIPIOS_00mun/00mun.shp"
+  out_path       = "data/analysis/mun_month_prices/mun_month_prices.parquet",
+  mun_shp        = "data/map/inegi_mg_2024/unzipped/ONLY_MUNICIPIOS_00mun/00mun.shp",
+  volumes_file   = NULL
 ) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -247,16 +248,54 @@ compute_mun_month_prices <- function(
       by = "CVGEO"
     )
 
-  # --- Volume placeholders (require external data — see file header) ---
-  mun_month <- mun_month %>%
-    mutate(
-      # premium_volume and regular_volume must come from an external source
-      # with municipality-level sales volumes (e.g. CRE or SENER data).
-      # premium_share = premium_volume / (premium_volume + regular_volume)
-      premium_volume = NA_real_,
-      regular_volume = NA_real_,
-      premium_share  = NA_real_
-    )
+  # --- Join volumes and compute premium_share ---
+  # volumes_file: path to mun_month_volumes.parquet produced by process_volumes()
+  # Columns expected: CVEGEO, year, month, regular_volume_l, premium_volume_l
+  #
+  # premium_share = premium_volume_l / (premium_volume_l + regular_volume_l)
+  # Interpretation: share of premium gasoline in total (premium + regular) sales
+  # by volume (liters) within the municipality-month.
+  # NA when either volume is missing.
+  if (!is.null(volumes_file) && file.exists(volumes_file)) {
+    vols <- arrow::read_parquet(volumes_file) |>
+      dplyr::select(CVEGEO, year, month, regular_volume_l, premium_volume_l)
+    # At this point mun_month uses CVGEO internally; volumes uses CVEGEO.
+    # The final select() renames CVGEO -> CVEGEO, so we join on CVGEO = CVEGEO.
+    mun_month <- mun_month |>
+      dplyr::left_join(vols, by = c("CVGEO" = "CVEGEO", "year", "month")) |>
+      dplyr::mutate(
+        premium_volume = premium_volume_l,
+        regular_volume = regular_volume_l,
+        # premium_share: premium liters / (premium + regular liters)
+        # NA if either volume is missing or their sum is zero/NA
+        premium_share = dplyr::if_else(
+          !is.na(premium_volume_l) & !is.na(regular_volume_l) &
+            (premium_volume_l + regular_volume_l) > 0,
+          premium_volume_l / (premium_volume_l + regular_volume_l),
+          NA_real_
+        )
+      ) |>
+      dplyr::select(-regular_volume_l, -premium_volume_l)
+
+    pct_vol_matched <- round(100 * mean(!is.na(mun_month$premium_volume)), 1)
+    message(sprintf(
+      "  Volume join: %.1f%% of mun-months matched (premium_volume non-NA)",
+      pct_vol_matched
+    ))
+  } else {
+    if (is.null(volumes_file)) {
+      message("  volumes_file not provided — premium_volume, regular_volume, premium_share set to NA")
+    } else {
+      warning("  volumes_file not found: ", volumes_file,
+              " — volume columns set to NA")
+    }
+    mun_month <- mun_month |>
+      dplyr::mutate(
+        premium_volume = NA_real_,
+        regular_volume = NA_real_,
+        premium_share  = NA_real_
+      )
+  }
 
   # --- Final column order (matches Shaun's requested table) ---
   mun_month <- mun_month %>%
