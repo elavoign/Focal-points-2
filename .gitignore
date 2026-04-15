@@ -12,3 +12,11 @@ _targets/
 targets/
 outputs/
 data/
+
+.DS_Store
+.Rhistory
+.RData
+_targets/
+targets/
+outputs/
+data/
