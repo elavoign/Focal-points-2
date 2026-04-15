@@ -229,10 +229,7 @@ write_shaun_excel <- function(
       expand      = ggplot2::expansion(add = 30)
     ) +
     ggplot2::scale_y_continuous(
-      labels = function(x, var) {
-        # applied per facet via after_stat — using scales::label_auto
-        scales::label_auto()(x)
-      }
+      labels = scales::label_number(accuracy = NULL)
     ) +
     ggplot2::labs(
       title    = title_str,
