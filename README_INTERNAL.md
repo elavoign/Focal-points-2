@@ -440,3 +440,99 @@ data/raw_private/stations/Stations.rda
 Correr:
 
 tar_make()
+
+---
+
+## 9) Capa Shaun: Panel Balanceado + Precios Municipio × Mes
+
+**Branch:** `feature/shaun-mun-month`  
+**Factory:** `targets/shaun_mun_month.R` → función `shaun_mun_month()`  
+**Funciones:** `R/Processed_to_Merged/build_balanced_panel.R`, `R/Analysis/mun_month_functions.R`
+
+### Output final
+
+`data/analysis/mun_month_prices/mun_month_prices.parquet`
+
+Columnas:
+
+| Columna | Descripción |
+|---|---|
+| `year`, `month` | Año y mes calendario |
+| `CVEGEO` | Código INEGI de municipio (5 dígitos, zero-padded) |
+| `CVE_ENT` | Código de entidad (2 dígitos) |
+| `NOM_ENT` | Nombre del estado (INEGI oficial) |
+| `NOM_MUN` | Nombre del municipio (Marco Geoestadístico 00mun.shp) |
+| `premium_price_monthly` | Precio mensual gasolina premium (promedio de promedios diarios) |
+| `regular_price_monthly` | Precio mensual gasolina regular (promedio de promedios diarios) |
+| `premium_to_regular_price_ratio` | `premium_price_monthly / regular_price_monthly` |
+| `premium_volume` | **NA** — requiere datos externos (ver abajo) |
+| `regular_volume` | **NA** — requiere datos externos (ver abajo) |
+| `premium_share` | **NA** — requiere datos externos (ver abajo) |
+| `n_days_in_month` | Días calendario del mes con al menos una estación en el municipio |
+| `n_days_with_regular` | Días con precio regular no-NA |
+| `n_days_with_premium` | Días con precio premium no-NA |
+
+### Target intermedio: `balanced_panel_parquets`
+
+Output: `data/merged/balanced_panel/year=YYYY/balanced_panel.parquet`
+
+Un panel **balanceado** estación × día: una fila por cada par `(station_id, date)` para cada día calendario del año.
+
+Mecanismo:
+- `tidyr::expand_grid(station_id, date)` genera la grilla completa para el año.
+- Left-join de los precios observados del panel `panel_station_day`.
+- **LOCF (Last Observation Carried Forward)**: `tidyr::fill()` dentro de `group_by(station_id)`, propagando hacia adelante el último precio observado.
+- **Cap de 60 días**: si `days_since_last_report > 60`, el precio imputado se anula (`NA`). El flag `flag_stale_over_60d = TRUE` marca estos rows.
+- `flag_carry_forward = TRUE` identifica precios imputados (no observados directamente).
+
+Columnas clave del panel balanceado:
+
+| Columna | Descripción |
+|---|---|
+| `station_id`, `date` | Llave primaria |
+| `CVGEO` | Código municipio (5 dígitos) — de `municode_map` en catálogo CRE |
+| `station_regular`, `station_premium`, `station_diesel` | Precios (NA si stale > 60 días) |
+| `is_obs` | TRUE si el precio es observado directamente ese día |
+| `flag_carry_forward` | TRUE si el precio viene de LOCF |
+| `flag_stale_over_60d` | TRUE si el carry-forward excede 60 días (precio anulado) |
+| `days_since_last_report` | Días desde el último reporte observado |
+
+### Método de agregación (double-average de Shaun)
+
+**Paso 1** — Estaciones → Municipio × Día:
+```
+Para cada (CVGEO, date):
+  mun_avg_regular = mean(station_regular, na.rm = TRUE)
+  mun_avg_premium = mean(station_premium, na.rm = TRUE)
+  (cada estación tiene igual peso; se excluyen precios NA)
+```
+
+**Paso 2** — Municipio × Día → Municipio × Mes:
+```
+Para cada (CVGEO, year, month):
+  regular_price_monthly = mean(mun_avg_regular, na.rm = TRUE)
+  premium_price_monthly = mean(mun_avg_premium, na.rm = TRUE)
+  (cada día tiene igual peso)
+```
+
+Este procedimiento de dos pasos garantiza que el precio mensual es el "promedio de promedios diarios", **no** un promedio ponderado directo de todas las estaciones-día del mes. La distinción importa cuando el número de estaciones activas varía entre días del mes.
+
+### Asignación de CVGEO
+
+`CVGEO` viene directamente de `municode_map` en el catálogo CRE de estaciones (`stations.parquet`). **No se hace text-matching**. Estaciones con `CVGEO` ausente, `"000NA"` o `"00000"` son excluidas de la agregación municipal.
+
+### Volúmenes de ventas — datos NO disponibles
+
+Las columnas `premium_volume`, `regular_volume` y `premium_share` requieren **volúmenes físicos de ventas de gasolina por municipio**. Los archivos actualmente en `data/raw_public/` **no los contienen**:
+
+- `SAIC_Exporta_2026318_10052423.xlsx` — INEGI Censos Económicos, clase 468411. Nivel estatal, años censales (2003/2008/2013/2018/2023), valores monetarios únicamente. Sin volúmenes físicos, sin desagregación municipal, sin distinción premium/regular.
+- `Book1.xlsx` — PEMEX Business Segment Information (estados financieros trimestrales). Sin volúmenes por producto ni municipio.
+
+Para poblar estas columnas se necesita una fuente con volúmenes en litros por municipio y tipo de producto (e.g., datos de la CRE o SENER).
+
+### Correr solo esta capa
+
+```r
+library(targets)
+tar_make(mun_month_prices_parquet)   # también corre balanced_panel_parquets
+```
