@@ -1,0 +1,12 @@
+{
+  "name": "R Economics",
+  "image": "r-econ:2025-10v2",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "REditorSupport.r",
+        "quarto.quarto"
+      ]
+    }
+  }
+}
