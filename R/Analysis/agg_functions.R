@@ -51,7 +51,7 @@ get_prepost_window <- function(cut = REFORM_DATE, window_months = 1L) {
   )
 }
 
-# (1) Diario por CVGEO, por año
+# (1) Diario por CVEGEO, por año
 agg_daily_cvegeo_one_year <- function(in_parquet, year, out_dir) {
   out <- file.path(out_dir, sprintf("year=%d", year), "daily_cvegeo.parquet")
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
@@ -67,15 +67,15 @@ agg_daily_cvegeo_one_year <- function(in_parquet, year, out_dir) {
   vars <- keep_existing(df, vars_level_cvegeo)
 
   df_out <- df |>
-    filter(!is.na(CVGEO), CVGEO != "") |>
-    group_by(date, CVGEO) |>
+    filter(!is.na(CVEGEO), CVEGEO != "") |>
+    group_by(date, CVEGEO) |>
     summarise(across(all_of(vars), ~ mean(.x, na.rm = TRUE)), .groups = "drop")
 
   arrow::write_parquet(df_out, out)
   out
 }
 
-# (2) Promedio pre/post por CVGEO usando la salida de (1)
+# (2) Promedio pre/post por CVEGEO usando la salida de (1)
 agg_prepost_cvegeo_from_daily <- function(daily_cvegeo_files, out_path, window_months = 1L) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -88,13 +88,13 @@ agg_prepost_cvegeo_from_daily <- function(daily_cvegeo_files, out_path, window_m
 
   pre <- df |>
     filter(date >= win$pre_start, date <= win$pre_end) |>
-    group_by(CVGEO) |>
+    group_by(CVEGEO) |>
     summarise(across(all_of(vars), ~ mean(.x, na.rm = TRUE)), .groups = "drop") |>
     mutate(period = "pre")
 
   post <- df |>
     filter(date >= win$post_start, date <= win$post_end) |>
-    group_by(CVGEO) |>
+    group_by(CVEGEO) |>
     summarise(across(all_of(vars), ~ mean(.x, na.rm = TRUE)), .groups = "drop") |>
     mutate(period = "post")
 

@@ -9,6 +9,8 @@ analysis_regular_break_2399 <- function() {
     tar_target(
       regular_break_2399_files,
       {
+        spreads_station_day_parquets  # explicit dependency: must be rebuilt before reading
+
         source("R/analysis_regular_break_2399.R")
 
         build_regular_break_2399_outputs(

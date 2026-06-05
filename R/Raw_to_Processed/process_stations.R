@@ -38,7 +38,7 @@ process_stations <- function(in_rda, out_parquet) {
       terminal_id = terminal_id(region_wholesale_pemex),
       estado    = str_squish(as.character(state_cre0)),
       municipio = str_squish(as.character(muniname_cre0)),
-      CVGEO = str_pad(as.character(municode_map), width = 5, side = "left", pad = "0"),
+      CVEGEO = str_pad(as.character(municode_map), width = 5, side = "left", pad = "0"),
       localidad = str_squish(as.character(suburb_cre0)),
       lat = suppressWarnings(as.numeric(coalesce(lat_correct, latitude))),
       lon = suppressWarnings(as.numeric(coalesce(long_correct, longitude)))
@@ -47,7 +47,7 @@ process_stations <- function(in_rda, out_parquet) {
       flag_missing_region_wholesale_pemex =
         is.na(region_wholesale_pemex) | str_trim(region_wholesale_pemex) == "",
       flag_missing_terminal_id = is.na(terminal_id), 
-      flag_missing_cvegeo_mun = is.na(CVGEO) | CVGEO == "000NA" | CVGEO == "00000"
+      flag_missing_cvegeo_mun = is.na(CVEGEO) | CVEGEO == "000NA" | CVEGEO == "00000"
     )
 
   if (any(is.na(stations_out$station_id) | stations_out$station_id == "")) {

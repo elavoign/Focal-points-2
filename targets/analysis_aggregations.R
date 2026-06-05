@@ -5,7 +5,7 @@ suppressPackageStartupMessages({
 analysis_aggregations <- function() {
   list(
 
-    # (1) Diario por CVGEO (por año)
+    # (1) Diario por CVEGEO (por año)
     tar_target(
       daily_cvegeo_parquets,
       {

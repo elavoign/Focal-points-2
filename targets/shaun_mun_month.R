@@ -123,6 +123,22 @@ shaun_mun_month <- function() {
         )
       },
       format = "file"
+    ),
+
+    # ------------------------------------------------------------------
+    # Layer 6: Municipality x month panel enriched with CONEVAL poverty
+    # ------------------------------------------------------------------
+    tar_target(
+      mun_month_poverty_parquet,
+      {
+        mun_month_prices_parquet  # explicit dependency
+        merge_poverty_into_mun_month(
+          mun_month_parquet = mun_month_prices_parquet,
+          poverty_parquet   = "data/processed/coneval/municipal_poverty_2020.parquet",
+          out_path          = "data/analysis/mun_month_prices/mun_month_prices_with_poverty.parquet"
+        )
+      },
+      format = "file"
     )
 
   )

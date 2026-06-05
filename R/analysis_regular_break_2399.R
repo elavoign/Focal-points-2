@@ -116,7 +116,7 @@ prepare_break2399_panel <- function(
       month = as.Date(character()),
       estado = character(),
       municipio = character(),
-      CVGEO = character(),
+      CVEGEO = character(),
       station_regular = numeric()
     ))
   }
@@ -128,7 +128,7 @@ prepare_break2399_panel <- function(
       date = as.Date(date),
       estado = normalize_estado_break2399(estado),
       municipio = stringr::str_squish(as.character(municipio)),
-      CVGEO = as.character(CVGEO),
+      CVEGEO = as.character(CVEGEO),
       station_regular = as.numeric(station_regular)
     ) |>
     filter(
@@ -162,7 +162,7 @@ compute_station_month_breaks <- function(
       station_id = character(),
       numero_permiso = character(),
       municipio = character(),
-      CVGEO = character(),
+      CVEGEO = character(),
       broke_2399 = integer(),
       max_price_in_month = numeric(),
       first_break_date_in_month = as.Date(character())
@@ -170,7 +170,7 @@ compute_station_month_breaks <- function(
   }
 
   df |>
-    group_by(estado, month, station_id, numero_permiso, municipio, CVGEO) |>
+    group_by(estado, month, station_id, numero_permiso, municipio, CVEGEO) |>
     summarise(
       broke_2399 = as.integer(any(!is.na(station_regular) & station_regular > threshold)),
       max_price_in_month = suppressWarnings(max(station_regular, na.rm = TRUE)),

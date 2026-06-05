@@ -95,10 +95,9 @@ score_municipios_shp <- function(shp_path) {
   if ("NOM_ENT" %in% nms) s <- s + 2
   if ("NOM_MUN" %in% nms) s <- s + 6
 
-  # CVEGEO/CVGEO presente suma solo si parece municipal
+  # CVEGEO presente suma solo si parece municipal
   key <- NULL
-  if ("CVGEO" %in% nms) key <- "CVGEO"
-  if (is.null(key) && "CVEGEO" %in% nms) key <- "CVEGEO"
+  if ("CVEGEO" %in% nms) key <- "CVEGEO"
 
   if (!is.null(key)) {
     v <- as.character(x[[key]])
@@ -134,7 +133,7 @@ score_estados_shp <- function(shp_path) {
   # Penalize municipality-looking layers
   if ("CVE_MUN" %in% nms) s <- s - 10
   if ("NOM_MUN" %in% nms) s <- s - 10
-  if ("CVEGEO"  %in% nms || "CVGEO" %in% nms) s <- s - 2
+  if ("CVEGEO" %in% nms) s <- s - 2
 
   s
 }
@@ -169,38 +168,33 @@ pad_left <- function(x, width) {
 standardize_cvegeo_mun <- function(df_sf) {
   nms <- names(df_sf)
 
-  # Normalize CVEGEO -> CVGEO
-  if ("CVEGEO" %in% nms && !("CVGEO" %in% nms)) {
-    df_sf <- dplyr::rename(df_sf, CVGEO = CVEGEO)
-  }
-
-  if (!("CVGEO" %in% names(df_sf))) {
+  if (!("CVEGEO" %in% names(df_sf))) {
     # Construct from CVE_ENT + CVE_MUN
     if (!all(c("CVE_ENT", "CVE_MUN") %in% names(df_sf))) {
-      stop("Municipios layer missing CVGEO and also missing CVE_ENT/CVE_MUN to construct it.")
+      stop("Municipios layer missing CVEGEO and also missing CVE_ENT/CVE_MUN to construct it.")
     }
     df_sf <- df_sf %>%
       mutate(
         CVE_ENT = pad_left(CVE_ENT, 2),
         CVE_MUN = pad_left(CVE_MUN, 3),
-        CVGEO   = paste0(CVE_ENT, CVE_MUN)
+        CVEGEO  = paste0(CVE_ENT, CVE_MUN)
       )
   } else {
-    # Si CVGEO viene largo (ej. 13 con letras), recorta a municipio
+    # Si CVEGEO viene largo (ej. 13 con letras), recorta a municipio
     df_sf <- df_sf %>%
-      mutate(CVGEO = substr(as.character(CVGEO), 1, 5)) %>%
-      mutate(CVGEO = pad_left(CVGEO, 5))
+      mutate(CVEGEO = substr(as.character(CVEGEO), 1, 5)) %>%
+      mutate(CVEGEO = pad_left(CVEGEO, 5))
   }
 
   # Deriva CVE_ENT/CVE_MUN si faltan
-  if (!("CVE_ENT" %in% names(df_sf))) df_sf <- df_sf %>% mutate(CVE_ENT = substr(CVGEO, 1, 2))
-  if (!("CVE_MUN" %in% names(df_sf))) df_sf <- df_sf %>% mutate(CVE_MUN = substr(CVGEO, 3, 5))
+  if (!("CVE_ENT" %in% names(df_sf))) df_sf <- df_sf %>% mutate(CVE_ENT = substr(CVEGEO, 1, 2))
+  if (!("CVE_MUN" %in% names(df_sf))) df_sf <- df_sf %>% mutate(CVE_MUN = substr(CVEGEO, 3, 5))
 
   # VALIDACIÓN FUERTE: debe ser 5 dígitos numéricos
-  bad_share <- mean(!grepl("^[0-9]{5}$", df_sf$CVGEO))
+  bad_share <- mean(!grepl("^[0-9]{5}$", df_sf$CVEGEO))
   if (is.na(bad_share)) bad_share <- 1
   if (bad_share > 0) {
-    stop("After standardization, CVGEO is not 5-digit numeric for some rows. Bad share = ", bad_share)
+    stop("After standardization, CVEGEO is not 5-digit numeric for some rows. Bad share = ", bad_share)
   }
 
   df_sf
@@ -260,13 +254,13 @@ build_municipios_geo_mg2024 <- function(unzip_done_file,
     to_wgs84()
 
   keep <- intersect(
-    c("CVGEO","CVE_ENT","CVE_MUN","NOM_ENT","NOM_MUN"),
+    c("CVEGEO","CVE_ENT","CVE_MUN","NOM_ENT","NOM_MUN"),
     names(mun)
   )
 
   mun <- mun %>%
     select(any_of(keep), geometry) %>%
-    arrange(CVGEO)
+    arrange(CVEGEO)
 
   out_path <- file.path(out_dir, "municipios", "municipios.gpkg")
   write_geoparquet_sf(mun, out_path)

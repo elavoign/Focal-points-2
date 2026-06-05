@@ -41,14 +41,14 @@ build_panel_station_day_year <- function(year, out_dir = "data/merged/panel_stat
       flag_dup_station_day_station = flag_dup_station_day
     )
 
-  # Stations ya trae terminal_id unificado + CVGEO
+  # Stations ya trae terminal_id unificado + CVEGEO
   stations <- read_stations() %>%
     transmute(
       station_id,
       terminal_id,
       estado,
       municipio,
-      CVGEO,
+      CVEGEO,
       localidad,
       lat,
       lon,

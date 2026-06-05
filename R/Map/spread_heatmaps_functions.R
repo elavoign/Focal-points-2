@@ -16,14 +16,14 @@ suppressPackageStartupMessages({
 
 read_prepost_cvegeo <- function(prepost_parquet) {
   df <- arrow::read_parquet(prepost_parquet) %>% as_tibble()
-  if (!("CVGEO" %in% names(df))) stop("prepost_cvegeo parquet missing column CVGEO")
+  if (!("CVEGEO" %in% names(df))) stop("prepost_cvegeo parquet missing column CVEGEO")
   if (!("period" %in% names(df))) stop("prepost_cvegeo parquet missing column period (pre/post)")
-  df %>% mutate(CVGEO = stringr::str_pad(as.character(CVGEO), 5, pad = "0"))
+  df %>% mutate(CVEGEO = stringr::str_pad(as.character(CVEGEO), 5, pad = "0"))
 }
 
 read_municipios_geo <- function(municipios_geoparquet) {
   sf::read_sf(municipios_geoparquet) %>%
-    mutate(CVGEO = stringr::str_pad(as.character(CVGEO), 5, pad = "0"))
+    mutate(CVEGEO = stringr::str_pad(as.character(CVEGEO), 5, pad = "0"))
 }
 
 spread_vars_from_prepost <- function(df_prepost) {
@@ -34,12 +34,12 @@ spread_vars_from_prepost <- function(df_prepost) {
 get_prepost_long_onevar <- function(df_prepost, var) {
   if (!(var %in% names(df_prepost))) stop(sprintf("Variable %s not found in prepost df.", var))
 
-  pre  <- df_prepost %>% filter(period == "pre")  %>% select(CVGEO, value = all_of(var))
-  post <- df_prepost %>% filter(period == "post") %>% select(CVGEO, value = all_of(var))
+  pre  <- df_prepost %>% filter(period == "pre")  %>% select(CVEGEO, value = all_of(var))
+  post <- df_prepost %>% filter(period == "post") %>% select(CVEGEO, value = all_of(var))
 
   diff <- post %>%
-    left_join(pre, by = "CVGEO", suffix = c("_post", "_pre")) %>%
-    transmute(CVGEO, value = value_post - value_pre)
+    left_join(pre, by = "CVEGEO", suffix = c("_post", "_pre")) %>%
+    transmute(CVEGEO, value = value_post - value_pre)
 
   list(pre = pre, post = post, diff = diff)
 }
@@ -97,9 +97,9 @@ compute_global_abs_limit <- function(df_prepost, vars) {
 
   max_diff <- 0
   for (v in vars) {
-    pre  <- df_pre  %>% select(CVGEO, pre  = all_of(v))
-    post <- df_post %>% select(CVGEO, post = all_of(v))
-    dd   <- post %>% left_join(pre, by = "CVGEO") %>% mutate(diff = post - pre)
+    pre  <- df_pre  %>% select(CVEGEO, pre  = all_of(v))
+    post <- df_post %>% select(CVEGEO, post = all_of(v))
+    dd   <- post %>% left_join(pre, by = "CVEGEO") %>% mutate(diff = post - pre)
     md   <- suppressWarnings(max(abs(dd$diff), na.rm = TRUE))
     if (is.finite(md)) max_diff <- max(max_diff, md)
   }
@@ -110,7 +110,7 @@ compute_global_abs_limit <- function(df_prepost, vars) {
 }
 
 plot_municipio_choropleth <- function(sf_mun, df_vals, title, subtitle, out_path) {
-  gdf <- sf_mun %>% left_join(df_vals, by = "CVGEO")
+  gdf <- sf_mun %>% left_join(df_vals, by = "CVEGEO")
 
   p <- ggplot(gdf) +
     geom_sf(aes(fill = value), linewidth = 0) +

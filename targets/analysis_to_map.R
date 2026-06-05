@@ -21,7 +21,7 @@ analysis_to_map <- function() {
       format = "file"
     ),
 
-    # 2) Municipios GeoParquet (llave principal CVGEO)
+    # 2) Municipios GeoParquet (llave principal CVEGEO)
     tar_target(
       inegi_municipios_geo,
       build_municipios_geo_mg2024(unzip_done_file = inegi_mg_2024_unzipped_done),
@@ -35,7 +35,7 @@ analysis_to_map <- function() {
       format = "file"
     ),
 
-    # 4) Lookup municipal sin geometría (CVGEO + nombres + centroides)
+    # 4) Lookup municipal sin geometría (CVEGEO + nombres + centroides)
     tar_target(
       inegi_municipios_lookup,
       build_municipios_lookup_mg2024(municipios_geo_file = inegi_municipios_geo),

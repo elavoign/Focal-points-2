@@ -98,7 +98,7 @@ prepare_station_price_long <- function(df) {
       numero_permiso,
       estado = normalize_estado(estado),
       municipio,
-      CVGEO,
+      CVEGEO,
       localidad,
       lat,
       lon,
@@ -120,7 +120,7 @@ prepare_station_price_long <- function(df) {
       )
     ) |>
     select(
-      station_id, date, numero_permiso, estado, municipio, CVGEO,
+      station_id, date, numero_permiso, estado, municipio, CVEGEO,
       localidad, lat, lon, producto, price
     )
 }
@@ -131,7 +131,7 @@ compute_station_prepost_one_window <- function(df_long, reform_date, window_mont
   pre_df <- df_long |>
     filter(date >= wd$pre_start, date <= wd$pre_end) |>
     group_by(
-      station_id, numero_permiso, estado, municipio, CVGEO,
+      station_id, numero_permiso, estado, municipio, CVEGEO,
       localidad, lat, lon, producto
     ) |>
     summarise(
@@ -142,7 +142,7 @@ compute_station_prepost_one_window <- function(df_long, reform_date, window_mont
   post_df <- df_long |>
     filter(date >= wd$post_start, date <= wd$post_end) |>
     group_by(
-      station_id, numero_permiso, estado, municipio, CVGEO,
+      station_id, numero_permiso, estado, municipio, CVEGEO,
       localidad, lat, lon, producto
     ) |>
     summarise(
@@ -154,7 +154,7 @@ compute_station_prepost_one_window <- function(df_long, reform_date, window_mont
     pre_df,
     post_df,
     by = c(
-      "station_id", "numero_permiso", "estado", "municipio", "CVGEO",
+      "station_id", "numero_permiso", "estado", "municipio", "CVEGEO",
       "localidad", "lat", "lon", "producto"
     )
   ) |>

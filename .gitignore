@@ -1,5 +1,6 @@
 # OS / IDE artifacts
 .DS_Store
+**/.DS_Store
 .Rhistory
 .RData
 .Rproj.user/
@@ -13,3 +14,7 @@ outputs/
 
 # targets factory scripts are SOURCE CODE → DO track
 # (only _targets/ computed objects are excluded above)
+
+# Claude Code internal files
+.claude/worktrees/
+.claude/projects/

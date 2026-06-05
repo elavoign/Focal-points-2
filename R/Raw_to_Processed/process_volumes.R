@@ -34,9 +34,11 @@
 # Step 4: Multi-municipality rows
 #   Some rows in the CSV list multiple municipalities in a single 'municipios'
 #   cell, comma-separated (e.g., "El Llano,Cosío,San José de Gracia,Tepezalá").
-#   These represent a combined volume for the listed municipalities.
-#   Strategy: split by comma, assign volume equally to each municipality.
-#   These rows account for ~4.4% of Regular+Premium rows.
+#   These correspond to distributors that report aggregate volume across their
+#   service area without breaking it down by municipality.
+#   Strategy: drop these rows entirely (~4.6% of Regular+Premium rows).
+#   Rationale: no information exists in the source to allocate volume across
+#   the listed municipalities without arbitrary assumptions.
 #
 # Match results (validated): ~99.5% of rows matched. Unmatched rows dropped.
 
@@ -181,34 +183,13 @@ process_volumes <- function(
     stop("Unmapped entidad values: ", paste(bad_states, collapse = ", "))
   }
 
-  # --- Expand multi-municipality rows (comma-separated) ---
-  # Volume is divided equally among the named municipalities.
-  is_multi   <- grepl(",", df_raw$municipios)
-  df_single  <- df_raw[!is_multi, ]
-  df_multi   <- df_raw[is_multi, ]
+  # --- Drop multi-municipality rows (comma-separated) ---
+  is_multi  <- grepl(",", df_raw$municipios)
+  n_multi   <- sum(is_multi)
+  df_raw    <- df_raw[!is_multi, ]
 
-  n_multi_rows    <- nrow(df_multi)
-  n_expanded_rows <- 0L
-
-  if (n_multi_rows > 0L) {
-    df_multi <- df_multi |>
-      dplyr::mutate(
-        mun_list  = stringr::str_split(municipios, ","),
-        n_parts   = purrr::map_int(mun_list, length),
-        vol_split = volumen_vendido_l / n_parts
-      ) |>
-      tidyr::unnest(mun_list) |>
-      dplyr::mutate(
-        municipios        = stringr::str_squish(mun_list),
-        volumen_vendido_l = vol_split
-      ) |>
-      dplyr::select(-mun_list, -n_parts, -vol_split)
-
-    n_expanded_rows <- nrow(df_multi)
-    df_raw <- dplyr::bind_rows(df_single, df_multi)
-  } else {
-    df_raw <- df_single
-  }
+  message(sprintf("  Multi-mun rows dropped:           %d (%.1f%%)",
+                  n_multi, 100 * n_multi / n_raw))
 
   # --- Normalize municipality names ---
   df_raw <- df_raw |>
@@ -240,8 +221,7 @@ process_volumes <- function(
 
   message("=== process_volumes: CVEGEO matching report ===")
   message(sprintf("  Raw rows (Regular+Premium):       %d", n_raw))
-  message(sprintf("  Multi-mun rows (expanded):        %d -> %d rows", n_multi_rows, n_expanded_rows))
-  message(sprintf("  Total rows after expansion:       %d", n_total))
+  message(sprintf("  Total rows after multi-mun drop:  %d", n_total))
   message(sprintf("  Primary name-match:               %d (%.1f%%)", n_matched, 100 * n_matched / n_total))
   message(sprintf("  Override corrections applied:     %d", n_overrides))
   message(sprintf("  Unmatched (dropped):              %d", n_unmatched))

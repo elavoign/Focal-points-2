@@ -8,7 +8,6 @@ tar_option_set(
     "tibble",
     "stringr",
     "sf",
-    "magick",
     "httr2",
     "xml2",
     "rvest",
@@ -20,7 +19,12 @@ tar_option_set(
     "tarchetypes",
     "openxlsx",
     "lubridate",
-    "tidyr"
+    "tidyr",
+    "fixest",
+    "mgcv",
+    "broom",
+    "modelsummary",
+    "gridExtra"
   )
 )
 
@@ -41,6 +45,8 @@ list(
   analysis_regular_break_2399(),
   analysis_to_graphs(),
   analysis_to_map_heatmaps(),
-  outputpdf(),
-  shaun_mun_month()
+  shaun_mun_month(),
+  elasticity_poverty(),
+  gasoline_imports_gap(),
+  shaun_pooled_regression()
 )

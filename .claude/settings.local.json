@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(R --slave --quiet -e ' *)",
+      "Bash(grep -v \".parquet$\")",
+      "Bash(Rscript -e ' *)"
+    ]
+  }
+}

@@ -192,7 +192,7 @@ make_national_price_timeseries <- function(daily_cvegeo_files,
                        by = "1 year")
 
     subtitle <- paste0(
-      "Daily national mean (simple average across CVGEO). Reform date: ",
+      "Daily national mean (simple average across CVEGEO). Reform date: ",
       format(REFORM_DATE, "%Y-%m-%d"),
       "."
     )

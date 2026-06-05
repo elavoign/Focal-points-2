@@ -58,7 +58,7 @@ build_balanced_panel_year <- function(year,
   station_meta <- panel %>%
     select(
       station_id, numero_permiso, terminal_id,
-      estado, municipio, CVGEO, localidad, lat, lon,
+      estado, municipio, CVEGEO, localidad, lat, lon,
       flag_missing_terminal_id
     ) %>%
     distinct(station_id, .keep_all = TRUE)

@@ -30,7 +30,7 @@ compute_spreads_station_day_year <- function(year, out_dir = "data/analysis/spre
         station_id, date, year,
         numero_permiso,
         terminal_id,
-        estado, municipio, CVGEO, localidad,
+        estado, municipio, CVEGEO, localidad,
         lat, lon,
 
         station_regular, station_premium, station_diesel,
