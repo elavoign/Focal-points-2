@@ -1,25 +1,5 @@
 # R/Processed_to_Merged/build_balanced_panel.R
-#
-# Creates a BALANCED station x day panel.
-# For each station active in a given year, guarantees exactly one row per calendar
-# day in that year. Missing prices are filled forward (LOCF, carry-forward) from
-# the last observed price within the same year.
-#
-# Carry-forward cap: if a station has gone more than 60 days without reporting
-# any non-NA price, the carried-forward values are set back to NA and flagged.
-#
-# Design assumptions (documented):
-#  - "Active station in year Y" = station_id present in panel_station_day for year Y.
-#  - Carry-forward does NOT cross year boundaries. A station that last reported on
-#    Dec 30 will have NA prices at Jan 1 of the next year (conservative).
-#  - "Reporting" = having at least one non-NA station price (regular OR premium).
-#    A station-day in the retail data with all-NA prices does NOT reset the
-#    staleness clock (the last valid price was before that date).
-#  - The 60-day window is measured per station as the number of days elapsed
-#    since the last non-NA station price observation within the year.
-#  - Terminal, international, and quality-flag columns are NOT carry-forwarded;
-#    they remain NA for synthetic (grid-added) rows, since they belong to
-#    different data sources with their own reporting schedules.
+# See README_INTERNAL.md §5 Capa 3 for LOCF design and carry-forward cap.
 
 suppressPackageStartupMessages({
   library(dplyr)

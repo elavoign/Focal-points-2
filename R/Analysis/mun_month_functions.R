@@ -1,42 +1,6 @@
 # R/Analysis/mun_month_functions.R
-#
 # Aggregates the balanced station x day panel to municipality x month prices.
-#
-# Aggregation method (Shaun's double-average specification):
-#   Step 1 — station prices → municipality x day
-#     For each (CVEGEO, date): simple mean of non-NA station prices across all
-#     stations in the municipality. Each station gets equal weight for that day.
-#     Only prices that are NOT stale (flag_stale_over_60d = FALSE) are included.
-#
-#   Step 2 — municipality x day → municipality x month
-#     For each (CVEGEO, year, month): simple mean of the daily municipal prices
-#     from step 1. Each day gets equal weight in the monthly average.
-#
-#   This two-step procedure guarantees that the monthly price is the
-#   "average of daily averages", NOT a pooled average of all station-days in
-#   the month. The distinction matters when the number of active stations
-#   varies across days within a month.
-#
-# CVEGEO assignment:
-#   CVEGEO comes directly from stations.parquet (field municode_map in the raw
-#   CRE catalog). No text matching is performed. Stations with CVEGEO missing,
-#   "000NA", or "00000" are excluded from the municipality aggregation.
-#
-# Municipality and state names:
-#   NOMGEO (municipality name) is read from the INEGI Marco Geoestadistico
-#   shapefile (00mun.shp). State names (NOM_ENT) are derived from the official
-#   INEGI state codes (CVE_ENT extracted from CVEGEO).
-#
-# IMPORTANT — Volume data NOT available:
-#   The columns premium_volume, regular_volume, and premium_share require
-#   municipality-level gasoline sales volumes (in physical units, e.g. liters).
-#   The files currently in data/raw_public/ do NOT provide this:
-#     - SAIC_Exporta_2026318_10052423.xlsx : INEGI Censos Economicos,
-#         state-level monetary values only, census years 2003/2008/2013/2018/2023.
-#         No physical volumes, no municipality breakdown, no premium/regular split.
-#     - Book1.xlsx : PEMEX quarterly segment financials, no product-level volumes.
-#   These three columns are set to NA_real_ as explicit placeholders.
-
+# See README_INTERNAL.md §5 Capa 5 for full specification.
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)

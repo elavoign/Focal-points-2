@@ -1,20 +1,5 @@
 # targets/elasticity_poverty.R
-#
-# Targets factory for Tasks C and D: municipality-specific price elasticities
-# and their semiparametric relationship with municipal poverty.
-#
-# Depends on: mun_month_poverty_parquet  (from shaun_mun_month factory)
-#
-# New targets added:
-#   mun_elasticities_flag
-#     Runs the full elasticity × poverty analysis; returns a flag file.
-#     Side-effects written to disk:
-#       data/analysis/elasticity/mun_elasticities.parquet
-#       outputs/shaun/elasticity/elasticity_summary.xlsx
-#       outputs/shaun/elasticity/form1_scatter.pdf
-#       outputs/shaun/elasticity/form1_bins.pdf
-#       outputs/shaun/elasticity/form2_gam.pdf
-#       outputs/shaun/elasticity/elasticity_poverty_bins.{parquet,csv}
+# See README_INTERNAL.md §5 Capa 8 for specification and outputs.
 
 suppressPackageStartupMessages({
   library(targets)

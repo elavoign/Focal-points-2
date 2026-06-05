@@ -5,14 +5,8 @@ suppressPackageStartupMessages({
   library(lubridate)
 })
 
-# Reads GASOLINE.xlsx (Bloomberg spot assessments downloaded from ITAM finance lab).
-# Sheets used:
-#   MOIGC87P — Gulf Coast Conv Regular 87 (monthly, up to Jan 2024)
-#   MOIGC93P — Gulf Coast Conv Premium 93 (monthly, up to Jan 2024)
-# Bloomberg discontinued spot assessments on 2024-01-31.
-# Prices are reported in US cents per gallon (USc/gal).
-# Output converts to MXN per litre using monthly average FX from Banxico
-# (sourced from the existing international processed parquet).
+# Bloomberg Gulf Coast spot prices (Regular 87, Premium 93) — discontinued 2024-01-31.
+# Input: USc/gal → output: MXN/L using monthly FX from international processed parquet.
 
 process_gasoline_bloomberg <- function(
   xlsx_path   = "data/raw_public/GASOLINE.xlsx",

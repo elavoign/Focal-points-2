@@ -1,46 +1,5 @@
 # R/Raw_to_Processed/process_volumes.R
-#
-# Reads CRE/SENER volume data (04_volumenes_venta_expendio_petroliferos.csv),
-# assigns CVEGEO to each municipality via name matching against the INEGI
-# Marco Geoestadístico 2024 shapefile, and aggregates to
-# municipality × year × month with Regular and Premium volumes in liters.
-#
-# --- Matching strategy ---
-#
-# Step 1: State mapping (CSV entidad → CVE_ENT)
-#   The CSV uses common/short state names (e.g., "Coahuila", "Estado de México"),
-#   while INEGI uses official long forms ("Coahuila de Zaragoza", "Mexico").
-#   A hardcoded 32-entry table maps CSV names to 2-digit CVE_ENT codes.
-#   This mapping is deterministic and covers 100% of the 32 states.
-#
-# Step 2: Municipality name normalization
-#   Both the CSV 'municipios' field and the shapefile NOMGEO are normalized:
-#     - Strip accents: iconv(..., to = "ASCII//TRANSLIT")
-#     - UPPERCASE
-#     - Replace non-alphanumeric characters (except spaces) with space
-#     - Collapse multiple spaces; trim
-#   Join key: (CVE_ENT, normalized_name)
-#   Since the same municipality name can appear in multiple states, the
-#   state code is mandatory for uniqueness.
-#
-# Step 3: Hardcoded overrides for 3 known name discrepancies
-#   After normalization the following CSV names do not match INEGI NOMGEO:
-#   | CSV name (normalized)      | INEGI NOMGEO                              | CVEGEO |
-#   |----------------------------|-------------------------------------------|--------|
-#   | SAN JOSE ITURBIDE (GTO)    | San José de Iturbide                      | 11032  |
-#   | JUCHITAN DE ZARAGOZA (OAX) | Heroica Ciudad de Juchitán de Zaragoza    | 20043  |
-#   | SOLIDARIDAD (QRO)          | Playa del Carmen (renamed 2023 by INEGI)  | 23008  |
-#
-# Step 4: Multi-municipality rows
-#   Some rows in the CSV list multiple municipalities in a single 'municipios'
-#   cell, comma-separated (e.g., "El Llano,Cosío,San José de Gracia,Tepezalá").
-#   These correspond to distributors that report aggregate volume across their
-#   service area without breaking it down by municipality.
-#   Strategy: drop these rows entirely (~4.6% of Regular+Premium rows).
-#   Rationale: no information exists in the source to allocate volume across
-#   the listed municipalities without arbitrary assumptions.
-#
-# Match results (validated): ~99.5% of rows matched. Unmatched rows dropped.
+# See README_INTERNAL.md §5 Capa 1G for matching strategy and design decisions.
 
 suppressPackageStartupMessages({
   library(dplyr)

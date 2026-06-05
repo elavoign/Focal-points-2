@@ -1,39 +1,5 @@
-# Reads CONEVAL municipal poverty workbook and constructs a single
-# clean municipal poverty index for 2020.
-#
-# --- Workbook structure ---
-# Each sheet covers one demographic subgroup. The sheets that form
-# exhaustive partitions of the municipal population are:
-#
-#   Sex partition:   mujeres + hombres
-#   Age partition:   nna + jovenes + adultos + adultmay
-#   Geo partition:   rural + urbano
-#
-# The "pobindigena" sheet is a cross-cutting subgroup (not a
-# partition) and is excluded from the weighted aggregation.
-# It is used only for optional diagnostics.
-#
-# --- Column layout (data rows start at Excel row 8) ---
-#   Col 1  : CVE_ENT   — state code (2-digit string)
-#   Col 2  : NOM_ENT   — state name
-#   Col 3  : CVEGEO    — municipality code (5-digit; may need padding)
-#   Col 4  : NOM_MUN   — municipality name
-#   Col 7  : pop_2020  — subgroup population in 2020
-#   Col 12 : pov_pct_2020 — % of subgroup in poverty, 2020
-#
-# --- Poverty aggregation ---
-# For each partition, the municipal poverty rate is the subgroup-
-# population-weighted average of subgroup poverty rates.
-# Subgroups with NA poverty rates receive zero weight.
-#
-# --- Final index ---
-# If the three partition-based estimates are highly consistent
-# (|difference| < 2 pp for >= 95% of municipalities), the final
-# index is the simple mean of the three partition estimates.
-#
-# --- Outputs ---
-# Outputs written to data/processed/coneval/:
-#   municipal_poverty_2020.parquet and .csv
+# R/Raw_to_Processed/process_coneval_poverty.R
+# See README_INTERNAL.md §5 Capa 1F for workbook structure and aggregation method.
 
 suppressPackageStartupMessages({
   library(dplyr)
