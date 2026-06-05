@@ -122,14 +122,16 @@ suppressPackageStartupMessages({
   lines <- c(
     "PAGE 2 OF 2: ECONOMETRIC SPECIFICATIONS",
     "",
-    "FIXED EFFECTS",
+    "FIXED EFFECTS AND CLUSTERING",
     "  All IV specifications use year FE + month FE (separate, not interacted).",
     "  Both instruments take a single national value per calendar month, so",
     "  they would be perfectly collinear with year-month dummies and absorbed",
     "  entirely — no variation left for the first stage. Separate year and",
     "  month FE preserve within-year, month-to-month variation for identification.",
     "  Spec 1 (OLS baseline) uses year-month FE as the strictest time control.",
-    "  Standard errors clustered at the CVEGEO level in all specifications.",
+    "  Standard errors in Specs 2-6 two-way clustered: CVEGEO + year_month.",
+    "  Spec 1 clusters on CVEGEO only (year_month absorbed by FE).",
+    "  Spec 2' restricts Spec 2 to 2022+ for direct comparability with Spec 3/4.",
     "",
     "SPECIFICATION 1 — POOLED FE OLS (BASELINE)  [Year-month FE]",
     "  logit_share_mt = alpha_m + alpha_t + beta*log(P_prem/P_mag)_mt + e_mt",
@@ -685,8 +687,20 @@ suppressPackageStartupMessages({
   models[["(2) IV-Wholesale"]] <- fixest::feols(
     logit_share ~ 1 | CVEGEO + year + month |
       log_price_ratio ~ log_national_wholesale_ratio,
-    data = panel2, cluster = ~CVEGEO
+    data = panel2, cluster = ~CVEGEO + year_month
   )
+
+  # --- Spec 2' (Point 6): same as Spec 2 but restricted to 2022+ ---
+  # Makes Spec 2 directly comparable to Specs 3 and 4 (same sample period).
+  panel2r <- dplyr::filter(panel2, year >= 2022L)
+  if (nrow(panel2r) >= 100L) {
+    message(sprintf("  Spec 2' (2022+): IV — wholesale  (%d obs)", nrow(panel2r)))
+    models[["(2') Whol[22+]"]] <- fixest::feols(
+      logit_share ~ 1 | CVEGEO + year + month |
+        log_price_ratio ~ log_national_wholesale_ratio,
+      data = panel2r, cluster = ~CVEGEO + year_month
+    )
+  }
 
   # --- Spec 3: IV — IEPS ratio only (2022+ data, year + month FE) ---
   panel3 <- dplyr::filter(panel, !is.na(log_ieps_ratio))
@@ -695,7 +709,7 @@ suppressPackageStartupMessages({
     models[["(3) IV-IEPS"]] <- fixest::feols(
       logit_share ~ 1 | CVEGEO + year + month |
         log_price_ratio ~ log_ieps_ratio,
-      data = panel3, cluster = ~CVEGEO
+      data = panel3, cluster = ~CVEGEO + year_month
     )
   } else {
     message(sprintf("  Spec 3: SKIPPED — only %d obs", nrow(panel3)))
@@ -710,7 +724,7 @@ suppressPackageStartupMessages({
     m4 <- fixest::feols(
       logit_share ~ 1 | CVEGEO + year + month |
         log_price_ratio ~ log_national_wholesale_ratio + log_ieps_ratio,
-      data = panel4, cluster = ~CVEGEO
+      data = panel4, cluster = ~CVEGEO + year_month
     )
     models[["(4) IV-Both"]] <- m4
     sargan <- tryCatch(fixest::fitstat(m4, "sargan"), error = function(e) NULL)
@@ -736,7 +750,7 @@ suppressPackageStartupMessages({
         log_price_ratio + log_price_ratio:income_m_std ~
         log_national_wholesale_ratio +
         log_national_wholesale_ratio:income_m_std,
-      data = panel5, cluster = ~CVEGEO
+      data = panel5, cluster = ~CVEGEO + year_month
     )
   } else {
     message(sprintf("  Spec 5: SKIPPED (%d obs with income)", n_income))
@@ -758,7 +772,7 @@ suppressPackageStartupMessages({
       logit_share ~ 1 | CVEGEO + year + month |
         log_premium + log_regular ~
         log_terminal_premium + log_terminal_regular,
-      data = panel6, cluster = ~CVEGEO
+      data = panel6, cluster = ~CVEGEO + year_month
     )
     models[["(6) IV-Unres"]] <- m6
 
@@ -800,6 +814,86 @@ suppressPackageStartupMessages({
   }
 
   models
+}
+
+# --------------------------------------------------------------------------
+# National time-series collapse (Shaun Point 4)
+# Collapses the full panel to ~96 year-month observations (national averages).
+# Tests whether the aggregate time-series variation in the price ratio
+# maps to variation in the aggregate logit share — a pure time-series check
+# with no municipality-level noise.
+# --------------------------------------------------------------------------
+
+.run_national_collapse <- function(panel) {
+  national <- panel |>
+    dplyr::group_by(year, month, year_month) |>
+    dplyr::summarise(
+      n_mun                        = dplyr::n(),
+      logit_share                  = mean(logit_share,     na.rm = TRUE),
+      log_price_ratio              = mean(log_price_ratio, na.rm = TRUE),
+      log_national_wholesale_ratio = dplyr::first(log_national_wholesale_ratio),
+      log_ieps_ratio               = dplyr::first(log_ieps_ratio),
+      .groups = "drop"
+    ) |>
+    dplyr::filter(!is.na(logit_share), !is.na(log_price_ratio))
+
+  if (nrow(national) < 10L) {
+    message(sprintf(
+      "  National collapse: only %d obs — skipping", nrow(national)
+    ))
+    return(NULL)
+  }
+
+  message(sprintf("  National collapse: %d year-months", nrow(national)))
+  models_nat <- list()
+
+  # OLS — no FE: raw time-series correlation
+  models_nat[["(N1) OLS-raw"]] <- fixest::feols(
+    logit_share ~ log_price_ratio,
+    data = national
+  )
+
+  # OLS — year FE: within-year month-to-month variation only
+  models_nat[["(N2) OLS-yearFE"]] <- fixest::feols(
+    logit_share ~ log_price_ratio | year,
+    data = national
+  )
+
+  # IV — wholesale (if available)
+  nat2 <- dplyr::filter(national, !is.na(log_national_wholesale_ratio))
+  if (nrow(nat2) >= 10L) {
+    models_nat[["(N3) IV-Whol"]] <- tryCatch(
+      fixest::feols(
+        logit_share ~ 1 | year |
+          log_price_ratio ~ log_national_wholesale_ratio,
+        data = nat2
+      ),
+      error = function(e) {
+        message("  National IV-Whol failed: ", conditionMessage(e))
+        NULL
+      }
+    )
+    models_nat <- Filter(Negate(is.null), models_nat)
+  }
+
+  # IV — IEPS (2022+ only)
+  nat3 <- dplyr::filter(national, !is.na(log_ieps_ratio))
+  if (nrow(nat3) >= 10L) {
+    models_nat[["(N4) IV-IEPS"]] <- tryCatch(
+      fixest::feols(
+        logit_share ~ 1 | year |
+          log_price_ratio ~ log_ieps_ratio,
+        data = nat3
+      ),
+      error = function(e) {
+        message("  National IV-IEPS failed: ", conditionMessage(e))
+        NULL
+      }
+    )
+    models_nat <- Filter(Negate(is.null), models_nat)
+  }
+
+  models_nat
 }
 
 # --------------------------------------------------------------------------
@@ -889,6 +983,13 @@ suppressPackageStartupMessages({
     .make_regression_table_grob(bloomberg_models)
   } else NULL
 
+  # National time-series collapse (Shaun Point 4)
+  message("  National collapse regression")
+  national_models <- .run_national_collapse(panel)
+  national_grob   <- if (!is.null(national_models) && length(national_models) > 0L) {
+    .make_regression_table_grob(national_models)
+  } else NULL
+
   # IEPS time series graphs (both grades) + Bloomberg reference prices
   ieps_rates_graph <- if (!is.null(ieps_monthly_parquet)) {
     .plot_ieps_rates(ieps_monthly_parquet)
@@ -927,6 +1028,10 @@ suppressPackageStartupMessages({
   }
   if (!is.null(ieps_rates_graph)) print(ieps_rates_graph)
   if (!is.null(bloomberg_graph))  print(bloomberg_graph)
+  if (!is.null(national_grob)) {
+    grid::grid.newpage()
+    grid::grid.draw(national_grob)
+  }
   grDevices::dev.off()
   message(sprintf("  PDF saved: %s", pdf_path))
 
@@ -945,6 +1050,15 @@ suppressPackageStartupMessages({
                    fitstat = c("n", "r2", "ivf", "sargan"), tex = TRUE)
     sink()
     message(sprintf("  LaTeX Bloomberg: %s", tex_bloom))
+  }
+
+  if (!is.null(national_models) && length(national_models) > 0L) {
+    tex_nat <- file.path(out_dir, "regression_table_national.tex")
+    sink(tex_nat)
+    fixest::etable(national_models, se.below = TRUE, digits = 4,
+                   fitstat = c("n", "r2", "ivf"), tex = TRUE)
+    sink()
+    message(sprintf("  LaTeX National:  %s", tex_nat))
   }
 
   # --- 4. Regression panel parquet ---
