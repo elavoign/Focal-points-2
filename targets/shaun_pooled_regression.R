@@ -58,6 +58,24 @@ shaun_pooled_regression <- function() {
     ),
 
     # ------------------------------------------------------------------
+    # 3b. Spread diagnostic plots (Shaun Point 2)
+    #     Absolute and relative spread vs. price level for PEMEX terminal
+    #     and Bloomberg Gulf Coast data.
+    # ------------------------------------------------------------------
+    tar_target(
+      spread_diagnostic_outputs,
+      {
+        bloomberg_gasoline_parquet
+        build_spread_diagnostic_plots(
+          bloomberg_parquet = bloomberg_gasoline_parquet,
+          terminal_dir      = "data/processed/terminal",
+          out_dir           = "outputs/shaun/spread_diagnostics"
+        )
+      },
+      format = "file"
+    ),
+
+    # ------------------------------------------------------------------
     # 4a. Pooled regressions — full sample
     # ------------------------------------------------------------------
     tar_target(

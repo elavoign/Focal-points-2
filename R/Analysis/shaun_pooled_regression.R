@@ -189,6 +189,16 @@ suppressPackageStartupMessages({
     "               is relatively progressive.",
     "    beta2 < 0: richer municipalities more elastic -> regressive.",
     "",
+    "SPECIFICATION 6 — IV: UNRESTRICTED  [Year + Month FE]",
+    "  Endogenous:  log(P_prem)_mt  AND  log(P_reg)_mt  (separately)",
+    "  Instruments: log_terminal_premium_t  AND  log_terminal_regular_t",
+    "  Specs 1-5 impose beta_prem = -beta_reg (the ratio restriction):",
+    "    a 1% rise in premium and 1% rise in regular cancel each other.",
+    "  The unrestricted spec allows separate income + substitution effects.",
+    "  Restriction test  H0: beta_prem + beta_reg = 0",
+    "    Rejection means income effect present (raising both prices changes mix).",
+    "    Acceptance means ratio specification is valid.",
+    "",
     "PANEL JOIN SEQUENCE",
     "  Base panel          : logit_share + log_price_ratio (CVEGEO x yr x mo)",
     "  + national wholesale: joined on year + month  (national series)",
@@ -444,6 +454,8 @@ suppressPackageStartupMessages({
   coef_map <- c(
     "log_price_ratio"                  = "log(P_prem / P_mag)",
     "fit_log_price_ratio"              = "log(P_prem / P_mag)",
+    "fit_log_premium"                  = "log(P_prem)  [unrestricted]",
+    "fit_log_regular"                  = "log(P_reg)   [unrestricted]",
     "log_price_ratio:income_m_std"     = "log(P/P) x Income (std)",
     "fit_log_price_ratio:income_m_std" = "log(P/P) x Income (std)"
   )
@@ -552,10 +564,13 @@ suppressPackageStartupMessages({
     dplyr::collect() |>
     dplyr::mutate(
       log_national_wholesale_ratio = log(mean_premium / mean_regular),
+      log_terminal_premium         = log(mean_premium),
+      log_terminal_regular         = log(mean_regular),
       year  = as.integer(year),
       month = as.integer(month)
     ) |>
-    dplyr::select(year, month, log_national_wholesale_ratio)
+    dplyr::select(year, month, log_national_wholesale_ratio,
+                  log_terminal_premium, log_terminal_regular)
 }
 
 # --------------------------------------------------------------------------
@@ -575,6 +590,8 @@ suppressPackageStartupMessages({
     dplyr::mutate(
       logit_share     = log(premium_share / (1 - premium_share)),
       log_price_ratio = log(premium_to_regular_price_ratio),
+      log_premium     = log(premium_price_monthly),
+      log_regular     = log(regular_price_monthly),
       year_month      = paste0(year, "-", sprintf("%02d", month))
     )
 
@@ -592,13 +609,19 @@ suppressPackageStartupMessages({
     ieps <- arrow::read_parquet(ieps_monthly_parquet) |>
       dplyr::filter(year >= 2022) |>
       dplyr::select(year, month, ieps_magna_cuota, ieps_prem_cuota) |>
-      dplyr::mutate(log_ieps_ratio = log(ieps_prem_cuota / ieps_magna_cuota))
+      dplyr::mutate(
+        log_ieps_ratio = log(ieps_prem_cuota / ieps_magna_cuota),
+        log_ieps_prem  = log(ieps_prem_cuota),
+        log_ieps_magna = log(ieps_magna_cuota)
+      )
     panel <- dplyr::left_join(panel, ieps, by = c("year", "month"))
   } else {
     panel <- dplyr::mutate(panel,
       ieps_magna_cuota = NA_real_,
       ieps_prem_cuota  = NA_real_,
-      log_ieps_ratio   = NA_real_
+      log_ieps_ratio   = NA_real_,
+      log_ieps_prem    = NA_real_,
+      log_ieps_magna   = NA_real_
     )
   }
 
@@ -717,6 +740,63 @@ suppressPackageStartupMessages({
     )
   } else {
     message(sprintf("  Spec 5: SKIPPED (%d obs with income)", n_income))
+  }
+
+  # --- Spec 6: Unrestricted IV — separate log(p_premium) and log(p_regular) ---
+  # Shaun Point 3: the ratio spec imposes β_prem = -β_reg (substitution only).
+  # The unrestricted spec allows a separate income effect.
+  # Instruments: log_terminal_premium + log_terminal_regular (separately).
+  # Test H₀: β_prem + β_reg = 0 (ratio restriction holds).
+  panel6 <- dplyr::filter(
+    panel,
+    !is.na(log_terminal_premium), !is.na(log_terminal_regular),
+    !is.na(log_premium), !is.na(log_regular)
+  )
+  if (nrow(panel6) >= 100L) {
+    message(sprintf("  Spec 6: IV unrestricted  (%d obs)", nrow(panel6)))
+    m6 <- fixest::feols(
+      logit_share ~ 1 | CVEGEO + year + month |
+        log_premium + log_regular ~
+        log_terminal_premium + log_terminal_regular,
+      data = panel6, cluster = ~CVEGEO
+    )
+    models[["(6) IV-Unres"]] <- m6
+
+    ct6 <- tryCatch(fixest::coeftable(m6), error = function(e) NULL)
+    if (!is.null(ct6)) {
+      nm_p <- intersect(rownames(ct6), c("fit_log_premium", "log_premium"))
+      nm_r <- intersect(rownames(ct6), c("fit_log_regular", "log_regular"))
+      if (length(nm_p) > 0 && length(nm_r) > 0) {
+        b_p  <- ct6[nm_p, "Estimate"]
+        b_r  <- ct6[nm_r, "Estimate"]
+        V6   <- stats::vcov(m6)
+        s    <- b_p + b_r
+        se_s <- sqrt(pmax(0,
+          V6[nm_p, nm_p] + V6[nm_r, nm_r] + 2 * V6[nm_p, nm_r]
+        ))
+        t_stat <- s / se_s
+        p_val  <- 2 * stats::pnorm(-abs(t_stat))
+        verdict <- if (p_val < 0.01) {
+          "REJECT at 1% — income effect present, ratio restriction violated"
+        } else if (p_val < 0.05) {
+          "REJECT at 5% — income effect present"
+        } else if (p_val < 0.10) {
+          "marginally reject at 10%"
+        } else {
+          "cannot reject — ratio restriction consistent with data"
+        }
+        message(sprintf(
+          paste0(
+            "  Spec 6 restriction H0 (b_prem + b_reg = 0): ",
+            "b_prem=%.4f  b_reg=%.4f  sum=%.4f  t=%.3f  p=%.4f\n",
+            "  => %s"
+          ),
+          b_p, b_r, s, t_stat, p_val, verdict
+        ))
+      }
+    }
+  } else {
+    message(sprintf("  Spec 6: SKIPPED — only %d obs", nrow(panel6)))
   }
 
   models
