@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 
 read_panel_year <- function(year) {
   arrow::read_parquet(sprintf(
-    "data/merged/panel_station_day/year=%d/panel_station_day.parquet", year
+    "data/merged/balanced_panel/year=%d/balanced_panel.parquet", year
   ))
 }
 

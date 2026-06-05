@@ -10,9 +10,6 @@ suppressPackageStartupMessages({
   library(tidyr)
 })
 
-REFORM_DATE <- as.Date("2025-03-03")
-END_DATE <- as.Date("2025-08-31")
-
 normalize_estado_break2399 <- function(x) {
   x |>
     as.character() |>
@@ -99,8 +96,8 @@ read_spreads_station_day_break2399 <- function(
 
 prepare_break2399_panel <- function(
   years = 2025,
-  cut = REFORM_DATE,
-  end_date = END_DATE,
+  cut = as.Date("2025-03-03"),
+  end_date = as.Date("2025-08-31"),
   base_dir = "data/analysis/spreads_station_day"
 ) {
   df <- read_spreads_station_day_break2399(
@@ -143,8 +140,8 @@ prepare_break2399_panel <- function(
 
 compute_station_month_breaks <- function(
   years = 2025,
-  cut = REFORM_DATE,
-  end_date = END_DATE,
+  cut = as.Date("2025-03-03"),
+  end_date = as.Date("2025-08-31"),
   threshold = 23.99,
   base_dir = "data/analysis/spreads_station_day"
 ) {
@@ -187,8 +184,8 @@ compute_station_month_breaks <- function(
 
 compute_estado_month_summary <- function(
   years = 2025,
-  cut = REFORM_DATE,
-  end_date = END_DATE,
+  cut = as.Date("2025-03-03"),
+  end_date = as.Date("2025-08-31"),
   threshold = 23.99,
   base_dir = "data/analysis/spreads_station_day"
 ) {
@@ -232,8 +229,8 @@ compute_estado_month_summary <- function(
 
 compute_estado_total_mar_aug <- function(
   years = 2025,
-  cut = REFORM_DATE,
-  end_date = END_DATE,
+  cut = as.Date("2025-03-03"),
+  end_date = as.Date("2025-08-31"),
   threshold = 23.99,
   base_dir = "data/analysis/spreads_station_day"
 ) {
@@ -278,8 +275,8 @@ compute_estado_total_mar_aug <- function(
 }
 
 build_regular_break_2399_tables <- function(
-  cut = REFORM_DATE,
-  end_date = END_DATE,
+  cut = as.Date("2025-03-03"),
+  end_date = as.Date("2025-08-31"),
   years = 2025,
   threshold = 23.99,
   base_dir = "data/analysis/spreads_station_day"
@@ -333,8 +330,8 @@ write_regular_break_2399_excel <- function(tables, out_file) {
 }
 
 build_regular_break_2399_outputs <- function(
-  cut = REFORM_DATE,
-  end_date = END_DATE,
+  cut = as.Date("2025-03-03"),
+  end_date = as.Date("2025-08-31"),
   years = 2025,
   threshold = 23.99,
   out_dir = "outputs/regular_break_2399",

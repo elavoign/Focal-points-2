@@ -218,119 +218,18 @@ raw_to_processed <- function() list(
   # ========================
 
   tar_target(
-    terminal_2017_parquet,
+    terminal_parquet_paths,
     {
       source(script_terminal_id)
       source(script_terminal_year)
-      out <- "data/processed/terminal/year=2017/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2017, out_parquet = out)
-      out
+      process_terminal_all_years(
+        in_csv  = terminal_csv,
+        out_dir = "data/processed/terminal",
+        years   = 2017:2025
+      )
     },
     format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2018_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2018/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2018, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2019_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2019/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2019, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2020_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2020/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2020, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2021_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2021/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2021, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2022_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2022/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2022, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2023_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2023/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2023, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2024_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2024/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2024, out_parquet = out)
-      out
-    },
-    format = "file",
-    packages = c("readr", "dplyr", "arrow")
-  ),
-
-  tar_target(
-    terminal_2025_parquet,
-    {
-      source(script_terminal_id)
-      source(script_terminal_year)
-      out <- "data/processed/terminal/year=2025/terminal.parquet"
-      process_terminal_year(in_csv = terminal_csv, year = 2025, out_parquet = out)
-      out
-    },
-    format = "file",
+    iteration = "list",
     packages = c("readr", "dplyr", "arrow")
   ),
 

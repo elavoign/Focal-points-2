@@ -14,9 +14,7 @@ processed_to_merged_panel <- function() {
           retail_2017_parquet, retail_2018_parquet, retail_2019_parquet,
           retail_2020_parquet, retail_2021_parquet, retail_2022_parquet,
           retail_2023_parquet, retail_2024_parquet, retail_2025_parquet,
-          terminal_2017_parquet, terminal_2018_parquet, terminal_2019_parquet,
-          terminal_2020_parquet, terminal_2021_parquet, terminal_2022_parquet,
-          terminal_2023_parquet, terminal_2024_parquet, terminal_2025_parquet,
+          terminal_parquet_paths,
           stations_parquet
         )
 

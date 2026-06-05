@@ -9,8 +9,7 @@ merged_to_analysis_spreads <- function() {
     tar_target(
       spreads_station_day_parquets,
       {
-        # FORZAR que el merged exista antes:
-        panel_station_day_parquets
+        balanced_panel_parquets
 
         years_vec <- 2017:2025
         vapply(
