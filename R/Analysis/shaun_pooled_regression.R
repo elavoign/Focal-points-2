@@ -456,8 +456,7 @@ suppressPackageStartupMessages({
   coef_map <- c(
     "log_price_ratio"                  = "log(P_prem / P_mag)",
     "fit_log_price_ratio"              = "log(P_prem / P_mag)",
-    "fit_log_premium"                  = "log(P_prem)  [unrestricted]",
-    "fit_log_regular"                  = "log(P_reg)   [unrestricted]",
+    "fit_log_regular"                  = "log(P_reg) [income effect]",
     "log_price_ratio:income_m_std"     = "log(P/P) x Income (std)",
     "fit_log_price_ratio:income_m_std" = "log(P/P) x Income (std)"
   )
@@ -756,56 +755,53 @@ suppressPackageStartupMessages({
     message(sprintf("  Spec 5: SKIPPED (%d obs with income)", n_income))
   }
 
-  # --- Spec 6: Unrestricted IV — separate log(p_premium) and log(p_regular) ---
-  # Shaun Point 3: the ratio spec imposes β_prem = -β_reg (substitution only).
-  # The unrestricted spec allows a separate income effect.
-  # Instruments: log_terminal_premium + log_terminal_regular (separately).
-  # Test H₀: β_prem + β_reg = 0 (ratio restriction holds).
+  # --- Spec 6: Unrestricted IV — ratio + price level (Shaun Point 3) ---
+  # The ratio spec imposes that only log(p_prem/p_reg) matters (substitution only).
+  # Here log(p_reg) is added as a second endogenous variable to test for an income
+  # effect: when both prices rise proportionally, does the premium share fall?
+  #
+  # Instruments:
+  #   log(p_prem/p_reg) <- log_national_wholesale_ratio  [same as Spec 2, known strong]
+  #   log(p_reg)        <- log_terminal_regular          [cost level, near-orthogonal to ratio]
+  #
+  # The coefficient on log(p_reg) is the income effect directly.
+  # H0: coeff(log_reg) = 0 — ratio restriction holds, no income effect.
   panel6 <- dplyr::filter(
     panel,
-    !is.na(log_terminal_premium), !is.na(log_terminal_regular),
-    !is.na(log_premium), !is.na(log_regular)
+    !is.na(log_national_wholesale_ratio),
+    !is.na(log_terminal_regular),
+    !is.na(log_price_ratio),
+    !is.na(log_regular)
   )
   if (nrow(panel6) >= 100L) {
-    message(sprintf("  Spec 6: IV unrestricted  (%d obs)", nrow(panel6)))
+    message(sprintf("  Spec 6: IV unrestricted (ratio + level)  (%d obs)",
+                    nrow(panel6)))
     m6 <- fixest::feols(
       logit_share ~ 1 | CVEGEO + year + month |
-        log_premium + log_regular ~
-        log_terminal_premium + log_terminal_regular,
+        log_price_ratio + log_regular ~
+        log_national_wholesale_ratio + log_terminal_regular,
       data = panel6, cluster = ~CVEGEO + year_month
     )
     models[["(6) IV-Unres"]] <- m6
 
     ct6 <- tryCatch(fixest::coeftable(m6), error = function(e) NULL)
     if (!is.null(ct6)) {
-      nm_p <- intersect(rownames(ct6), c("fit_log_premium", "log_premium"))
       nm_r <- intersect(rownames(ct6), c("fit_log_regular", "log_regular"))
-      if (length(nm_p) > 0 && length(nm_r) > 0) {
-        b_p  <- ct6[nm_p, "Estimate"]
-        b_r  <- ct6[nm_r, "Estimate"]
-        V6   <- stats::vcov(m6)
-        s    <- b_p + b_r
-        se_s <- sqrt(pmax(0,
-          V6[nm_p, nm_p] + V6[nm_r, nm_r] + 2 * V6[nm_p, nm_r]
-        ))
-        t_stat <- s / se_s
-        p_val  <- 2 * stats::pnorm(-abs(t_stat))
-        verdict <- if (p_val < 0.01) {
+      if (length(nm_r) > 0) {
+        est <- ct6[nm_r, "Estimate"]
+        pv  <- ct6[nm_r, "Pr(>|t|)"]
+        verdict <- if (pv < 0.01) {
           "REJECT at 1% — income effect present, ratio restriction violated"
-        } else if (p_val < 0.05) {
+        } else if (pv < 0.05) {
           "REJECT at 5% — income effect present"
-        } else if (p_val < 0.10) {
+        } else if (pv < 0.10) {
           "marginally reject at 10%"
         } else {
           "cannot reject — ratio restriction consistent with data"
         }
         message(sprintf(
-          paste0(
-            "  Spec 6 restriction H0 (b_prem + b_reg = 0): ",
-            "b_prem=%.4f  b_reg=%.4f  sum=%.4f  t=%.3f  p=%.4f\n",
-            "  => %s"
-          ),
-          b_p, b_r, s, t_stat, p_val, verdict
+          "  Spec 6 H0 (income effect = 0): est=%.4f  p=%.4f => %s",
+          est, pv, verdict
         ))
       }
     }
