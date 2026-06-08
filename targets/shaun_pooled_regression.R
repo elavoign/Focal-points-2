@@ -76,7 +76,29 @@ shaun_pooled_regression <- function() {
     ),
 
     # ------------------------------------------------------------------
-    # 4a. Pooled regressions — full sample
+    # 4. Results PDF (updated — all specs + spread diagnostics)
+    # ------------------------------------------------------------------
+    tar_target(
+      results_updated_pdf,
+      {
+        mun_month_poverty_parquet
+        ieps_monthly_parquet
+        income_car_owners_parquet
+        bloomberg_gasoline_parquet
+        build_results_pdf(
+          base_parquet         = mun_month_poverty_parquet,
+          ieps_monthly_parquet = ieps_monthly_parquet,
+          income_parquet       = income_car_owners_parquet,
+          terminal_dir         = "data/processed/terminal",
+          bloomberg_parquet    = bloomberg_gasoline_parquet,
+          out_path             = "outputs/shaun/results_updated.pdf"
+        )
+      },
+      format = "file"
+    ),
+
+    # ------------------------------------------------------------------
+    # 5a. Pooled regressions — full sample
     # ------------------------------------------------------------------
     tar_target(
       pooled_regression_outputs,
