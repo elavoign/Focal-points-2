@@ -1,6 +1,3 @@
-# R/Analysis/mun_month_functions.R
-# Aggregates the balanced station x day panel to municipality x month prices.
-# See README_INTERNAL.md §5 Capa 5 for full specification.
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)
@@ -9,12 +6,6 @@ suppressPackageStartupMessages({
   library(sf)
 })
 
-# --------------------------------------------------------------------------
-# Internal helpers
-# --------------------------------------------------------------------------
-
-# INEGI official state names keyed by CVE_ENT (2-digit zero-padded).
-# Source: SAIC entity column ("01 Aguascalientes", etc.) — 32 states + CDMX.
 .cve_ent_to_nom <- function() {
   tibble::tribble(
     ~CVE_ENT, ~NOM_ENT,
@@ -53,8 +44,6 @@ suppressPackageStartupMessages({
   )
 }
 
-# Reads INEGI municipios shapefile and returns a tidy lookup:
-# CVEGEO (5-digit) | CVE_ENT | NOM_ENT | NOM_MUN
 .build_geo_lookup <- function(
   mun_shp = "data/map/inegi_mg_2024/unzipped/ONLY_MUNICIPIOS_00mun/00mun.shp"
 ) {
@@ -80,13 +69,9 @@ suppressPackageStartupMessages({
   mun %>% left_join(state_lk, by = "CVE_ENT")
 }
 
-# --------------------------------------------------------------------------
-# Step 1: balanced panel → municipality x day
-# --------------------------------------------------------------------------
-
 .compute_mun_day_one_year <- function(panel_yr) {
   panel_yr %>%
-    # Exclude invalid CVEGEOs
+
     filter(
       !is.na(CVEGEO),
       CVEGEO != "",
@@ -99,9 +84,7 @@ suppressPackageStartupMessages({
       n_stations_total          = n(),
       n_stations_regular        = sum(!is.na(station_regular)),
       n_stations_premium        = sum(!is.na(station_premium)),
-      # flag_carry_forward is TRUE when price came from LOCF (within 60-day cap).
-      # Stale prices are already set to NA upstream, so conditioning on
-      # !is.na(station_*) cleanly counts only non-stale imputed observations.
+
       n_stations_reg_imputed    = sum(!is.na(station_regular) & flag_carry_forward),
       n_stations_prem_imputed   = sum(!is.na(station_premium) & flag_carry_forward),
       mun_avg_regular    = mean(station_regular, na.rm = TRUE),
@@ -109,7 +92,7 @@ suppressPackageStartupMessages({
       .groups = "drop"
     ) %>%
     mutate(
-      # mean(x, na.rm=TRUE) returns NaN when all inputs are NA — convert to NA
+
       mun_avg_regular = if_else(
         n_stations_regular == 0L | is.nan(mun_avg_regular),
         NA_real_, mun_avg_regular
@@ -120,10 +103,6 @@ suppressPackageStartupMessages({
       )
     )
 }
-
-# --------------------------------------------------------------------------
-# Step 2: municipality x day → municipality x month
-# --------------------------------------------------------------------------
 
 .compute_mun_month_from_day <- function(mun_day, year) {
   mun_day %>%
@@ -138,7 +117,7 @@ suppressPackageStartupMessages({
       n_days_with_premium      = sum(!is.na(mun_avg_premium)),
       regular_price_monthly    = mean(mun_avg_regular, na.rm = TRUE),
       premium_price_monthly    = mean(mun_avg_premium, na.rm = TRUE),
-      # Total and imputed station-day counts summed across days in month
+
       .n_sd_reg_total   = sum(n_stations_regular,     na.rm = TRUE),
       .n_sd_prem_total  = sum(n_stations_premium,     na.rm = TRUE),
       .n_sd_reg_imp     = sum(n_stations_reg_imputed,  na.rm = TRUE),
@@ -165,10 +144,6 @@ suppressPackageStartupMessages({
                   -.n_sd_reg_imp,   -.n_sd_prem_imp)
 }
 
-# --------------------------------------------------------------------------
-# Main function: balanced panel files → municipality x month parquet
-# --------------------------------------------------------------------------
-
 compute_mun_month_prices <- function(
   balanced_panel_files,
   out_path       = "data/analysis/mun_month_prices/mun_month_prices.parquet",
@@ -177,10 +152,8 @@ compute_mun_month_prices <- function(
 ) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
-  # --- Load INEGI geo names ---
   geo_lookup <- .build_geo_lookup(mun_shp)
 
-  # --- Process one year at a time (memory-safe) ---
   message(sprintf("compute_mun_month_prices: processing %d year files",
                   length(balanced_panel_files)))
 
@@ -191,7 +164,7 @@ compute_mun_month_prices <- function(
       return(NULL)
     }
     message(sprintf("  [%d] Step 1: station -> mun x day", yr))
-    panel_yr <- arrow::read_parquet(f)
+    panel_yr <- arrow::read_parquet(f, mmap = FALSE)
     mun_day  <- .compute_mun_day_one_year(panel_yr)
 
     message(sprintf(
@@ -209,42 +182,27 @@ compute_mun_month_prices <- function(
     mun_month_yr
   })
 
-  # Remove any NULLs (skipped years)
   mun_month_list <- Filter(Negate(is.null), mun_month_list)
   mun_month      <- dplyr::bind_rows(mun_month_list)
 
-  # --- Price ratio ---
   mun_month <- mun_month %>%
     mutate(
-      # premium_to_regular_price_ratio:
-      # Monthly premium price divided by monthly regular price, within municipality.
-      # Computed from step-2 averages (averages of daily averages).
-      # NA when either monthly price is missing.
+
       premium_to_regular_price_ratio = premium_price_monthly / regular_price_monthly
     )
 
-  # --- Join INEGI names ---
   mun_month <- mun_month %>%
     left_join(geo_lookup, by = "CVEGEO")
 
-  # --- Join volumes and compute premium_share ---
-  # volumes_file: path to mun_month_volumes.parquet produced by process_volumes()
-  # Columns expected: CVEGEO, year, month, regular_volume_l, premium_volume_l
-  #
-  # premium_share = premium_volume_l / (premium_volume_l + regular_volume_l)
-  # Interpretation: share of premium gasoline in total (premium + regular) sales
-  # by volume (liters) within the municipality-month.
-  # NA when either volume is missing.
   if (!is.null(volumes_file) && file.exists(volumes_file)) {
-    vols <- arrow::read_parquet(volumes_file) |>
+    vols <- arrow::read_parquet(volumes_file, mmap = FALSE) |>
       dplyr::select(CVEGEO, year, month, regular_volume_l, premium_volume_l)
     mun_month <- mun_month |>
       dplyr::left_join(vols, by = c("CVEGEO", "year", "month")) |>
       dplyr::mutate(
         premium_volume = premium_volume_l,
         regular_volume = regular_volume_l,
-        # premium_share: premium liters / (premium + regular liters)
-        # NA if either volume is missing or their sum is zero/NA
+
         premium_share = dplyr::if_else(
           !is.na(premium_volume_l) & !is.na(regular_volume_l) &
             (premium_volume_l + regular_volume_l) > 0,
@@ -260,7 +218,6 @@ compute_mun_month_prices <- function(
       pct_vol_matched
     ))
 
-    # Coverage by year — flag years with < 50% match
     cov_yr <- mun_month |>
       dplyr::group_by(year) |>
       dplyr::summarise(
@@ -291,7 +248,6 @@ compute_mun_month_prices <- function(
       )
   }
 
-  # --- Final column order (matches Shaun's requested table) ---
   mun_month <- mun_month %>%
     select(
       year,
@@ -306,43 +262,31 @@ compute_mun_month_prices <- function(
       premium_volume,
       regular_volume,
       premium_share,
-      # Diagnostic columns
+
       n_days_in_month,
       n_days_with_regular,
       n_days_with_premium,
-      # Carry-forward diagnostics: fraction of station-day price observations
-      # that came from LOCF imputation (within the 60-day cap).
-      # 0 = all prices observed fresh that day; 1 = all prices carried forward.
+
       frac_imputed_regular,
       frac_imputed_premium
     ) %>%
     arrange(CVEGEO, year, month)
 
-  # ==========================================================================
-  # VALIDATION CHECKS
-  # ==========================================================================
-
   n_rows    <- nrow(mun_month)
   n_mun     <- n_distinct(mun_month$CVEGEO)
   n_years   <- n_distinct(mun_month$year)
 
-  # Check 1: expected months per mun-year
   expected_mun_year_months <- n_mun * n_years * 12L
   actual_mun_year_months   <- nrow(mun_month)
-  # (Not a hard fail: municipalities may not appear in all year-months)
 
-  # Check 2: missing rates
   pct_miss_reg   <- round(100 * mean(is.na(mun_month$regular_price_monthly)), 1)
   pct_miss_prem  <- round(100 * mean(is.na(mun_month$premium_price_monthly)), 1)
   pct_miss_ratio <- round(100 * mean(is.na(mun_month$premium_to_regular_price_ratio)), 1)
 
-  # Check 3: CVEGEO not matched to INEGI names
   n_no_inegi_name <- sum(is.na(mun_month$NOM_MUN))
   n_cvgeos_in_output <- n_distinct(mun_month$CVEGEO)
   n_cvgeos_in_lookup <- n_distinct(geo_lookup$CVEGEO)
 
-  # Check 4: double-aggregation integrity
-  # For each mun-year-month, n_days_with_regular should be <= n_days_in_month
   bad_days <- mun_month %>%
     filter(n_days_with_regular > n_days_in_month | n_days_with_premium > n_days_in_month)
   if (nrow(bad_days) > 0L) {
@@ -352,7 +296,6 @@ compute_mun_month_prices <- function(
     ))
   }
 
-  # Check 5: carry-forward fraction summary
   pct_imp_reg  <- round(100 * mean(mun_month$frac_imputed_regular,  na.rm = TRUE), 1)
   pct_imp_prem <- round(100 * mean(mun_month$frac_imputed_premium, na.rm = TRUE), 1)
 
@@ -377,29 +320,6 @@ compute_mun_month_prices <- function(
   out_path
 }
 
-# --------------------------------------------------------------------------
-# Merge CONEVAL municipal poverty index into municipality x month panel
-# --------------------------------------------------------------------------
-#
-# Left-joins poverty_final (and companion columns) from the CONEVAL 2020
-# municipal poverty parquet into the municipality x month gasoline panel.
-#
-# The join key is CVEGEO (5-digit, zero-padded character). All 1,539
-# CVEGEOs present in the gasoline panel have a matching row in the poverty
-# file; 930 poverty CVEGEOs with no gas stations are dropped (left join).
-#
-# Poverty data is cross-sectional (2020 only). The same poverty value is
-# attached to every year-month row for a given municipality.
-#
-# Output columns added:
-#   poverty_final            — weighted mean of sex/age/geo partition estimates
-#   poverty_sex              — sex-partition estimate
-#   poverty_age              — age-partition estimate
-#   poverty_geo              — geo-partition estimate
-#   n_poverty_estimates      — number of non-NA partition estimates (0-3)
-#   flag_partition_divergence — TRUE if any two estimates differ by > 5pp
-# --------------------------------------------------------------------------
-
 merge_poverty_into_mun_month <- function(
   mun_month_parquet,
   poverty_parquet = "data/processed/coneval/municipal_poverty_2020.parquet",
@@ -407,8 +327,8 @@ merge_poverty_into_mun_month <- function(
 ) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
-  mun_month <- arrow::read_parquet(mun_month_parquet)
-  poverty   <- arrow::read_parquet(poverty_parquet) |>
+  mun_month <- arrow::read_parquet(mun_month_parquet, mmap = FALSE)
+  poverty   <- arrow::read_parquet(poverty_parquet, mmap = FALSE) |>
     dplyr::select(
       CVEGEO,
       poverty_final,
@@ -423,7 +343,6 @@ merge_poverty_into_mun_month <- function(
   out <- mun_month |>
     dplyr::left_join(poverty, by = "CVEGEO")
 
-  # --- Validation ---
   n_rows        <- nrow(out)
   n_mun         <- dplyr::n_distinct(out$CVEGEO)
   n_pov_nonNA   <- sum(!is.na(out$poverty_final))
@@ -449,9 +368,6 @@ merge_poverty_into_mun_month <- function(
                                  collapse = "\n")))()
   }
 
-  # --- Volume coverage by poverty quartile ---
-  # Detects whether missing volumes are systematically concentrated in poorer
-  # municipalities, which would introduce selection bias in the regression sample.
   if ("premium_volume" %in% names(out) && "poverty_final" %in% names(out)) {
     pov_cov <- out |>
       dplyr::filter(!is.na(poverty_final)) |>

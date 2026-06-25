@@ -1,5 +1,3 @@
-# targets/analysis_to_graphs_inegi.R
-
 analysis_to_graphs_inegi <- function() {
   list(
 

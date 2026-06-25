@@ -1,5 +1,3 @@
-# R/Graphs/inegi_graphs.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)
@@ -13,11 +11,8 @@ plot_inegi_bars <- function(
   out_path = "outputs/graphs/inegi/inegi_income_expenses.png"
 ) {
 
-  df <- arrow::read_parquet(in_parquet)
+  df <- arrow::read_parquet(in_parquet, mmap = FALSE)
 
-  # =========================
-  # INCOME
-  # =========================
   income <- df |>
     transmute(
       year,
@@ -31,9 +26,6 @@ plot_inegi_bars <- function(
     pivot_longer(-year, names_to = "category", values_to = "value") |>
     mutate(type = "Income")
 
-  # =========================
-  # EXPENSES
-  # =========================
   expenses <- df |>
     transmute(
       year,

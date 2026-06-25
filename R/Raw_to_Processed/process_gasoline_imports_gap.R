@@ -1,97 +1,3 @@
-# R/Raw_to_Processed/process_gasoline_imports_gap.R
-#
-# Builds an exploratory external-gap measure comparing U.S. exports of
-# finished motor gasoline to Mexico against Mexico's officially recorded
-# gasoline import volumes from PEMEX/SENER statistics.
-#
-# ==========================================================================
-# DATA SOURCES
-# ==========================================================================
-#
-# 1. EIA - U.S. Exports to Mexico of Finished Motor Gasoline
-#    File: U.S._Exports_to_Mexico_of_Finished_Motor_Gasoline.csv
-#    Source: U.S. Energy Information Administration (EIA series MGFEXMX1)
-#    Units: Thousand Barrels (monthly totals, NOT daily averages)
-#    Frequency: Monthly, Jan 1993 - Jan 2026
-#    Product: Finished Motor Gasoline only (excludes MTBE and blending
-#             components separately).
-#
-# 2. PEMEX - Volumen de las importaciones de productos petrolíferos
-#    File: kjojxagtbl_INDI12_*.csv
-#    Source: Petróleos Mexicanos / Dirección de Planeación
-#    Series used: "Gasolinas b" row only (not the "Total" row)
-#    Units: Miles de barriles DIARIOS (thousand barrels PER DAY = Mbd)
-#           → converted to monthly totals by multiplying by days-in-month
-#    Frequency: Monthly, Jan 2016 - Mar 2026
-#    IMPORTANT: Footnote b states that "Gasolinas" includes MTBE
-#    (methyl tert-butyl ether, a blending component) and "Enermex"
-#    (an imported gasoline additive). This makes the PEMEX series
-#    BROADER than the EIA "Finished Motor Gasoline" definition.
-#    The PEMEX figure will therefore tend to exceed EIA-equivalent volumes.
-#    Overlapping period with EIA: Jan 2016 - Jan 2026.
-#
-# 3. Country-share file - Mexico gasoline imports by country, 2024
-#    File: Importaciones-por-pais-2024-*.csv
-#    Units: Trade Value (USD) with Share as decimal fraction
-#    Coverage: 2024 annual aggregate only (58 partner countries)
-#    Used for: estimating USA share of Mexico gasoline imports
-#    LIMITATION: share is by TRADE VALUE (USD), not by volume.
-#                The volume share may differ, though U.S. dominance
-#                (92.8%) makes this distinction small in practice.
-#                Share is held constant across all months (no monthly
-#                variation available) - clearly labelled as approximation.
-#
-# ==========================================================================
-# UNIT CONVERSION
-# ==========================================================================
-#
-#   EIA:   already in Thousand Barrels/month (monthly totals)
-#   PEMEX: Mbd (thousand barrels/day) × days_in_month
-#          → Thousand Barrels/month
-#
-#   Both series end up in the same unit: kb_month
-#   (thousands of barrels, monthly total volume)
-#
-# ==========================================================================
-# GAP MEASURES
-# ==========================================================================
-#
-#   raw_gap_t      = US_exports_t  -  PEMEX_gasolinas_t
-#     Compares what the U.S. says it exported with Mexico's total recorded
-#     gasoline imports from ALL sources. Interpretation: because the U.S.
-#     is the dominant supplier (~93%), a raw_gap near zero means U.S. supply
-#     roughly accounts for all recorded imports. A strongly positive raw_gap
-#     would mean the U.S. alone reportedly exported MORE than Mexico recorded
-#     from all sources combined - an extraordinary discrepancy. In practice
-#     this gap is expected to be negative (non-U.S. suppliers add ~7%).
-#
-#   adjusted_gap_t = US_exports_t  -  (PEMEX_gasolinas_t * USA_share_2024)
-#     Isolates the U.S.-Mexico bilateral discrepancy. Compares:
-#       • what the U.S. says it exported to Mexico (EIA)
-#       • what Mexico's official statistics imply it received from the U.S.
-#         (= total PEMEX imports × 2024 U.S. value share)
-#     A positive adjusted_gap suggests the U.S. reported exporting more
-#     than Mexico officially recorded as arriving from the U.S.
-#     A negative adjusted_gap suggests Mexico recorded more U.S.-sourced
-#     imports than the U.S. reported exporting (e.g., timing lags).
-#
-# ==========================================================================
-# LIMITATIONS - DO NOT OVER-INTERPRET
-# ==========================================================================
-#
-#   1. Product mismatch: EIA "Finished Motor Gasoline" vs PEMEX "Gasolinas b"
-#      (which includes MTBE and Enermex). PEMEX figure is systematically
-#      broader; this inflates the PEMEX denominator and compresses the gap.
-#   2. USA_share is from 2024 only (no monthly or annual variation); held
-#      constant across 2016-2026.
-#   3. USA_share is by trade value, not volume.
-#   4. The gap captures statistical discrepancies between two national
-#      reporting systems. Many legitimate factors (timing, classification,
-#      transit shipments, inventory adjustments) can explain discrepancies.
-#      This is an EXPLORATORY measure, not evidence of illicit trade.
-#   5. PEMEX data for the most recent month(s) may be provisional (Mar/2026
-#      shows 0.0, excluded as incomplete).
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
@@ -104,22 +10,14 @@ suppressPackageStartupMessages({
   library(patchwork)
 })
 
-# --------------------------------------------------------------------------
-# Internal helpers
-# --------------------------------------------------------------------------
-
 .SPANISH_MONTHS <- c(
   "Ene" = 1L, "Feb" = 2L, "Mar" = 3L, "Abr" = 4L,
   "May" = 5L, "Jun" = 6L, "Jul" = 7L, "Ago" = 8L,
   "Sep" = 9L, "Oct" = 10L, "Nov" = 11L, "Dic" = 12L
 )
 
-# --------------------------------------------------------------------------
-# Reader 1: EIA exports
-# --------------------------------------------------------------------------
-
 .read_eia_exports <- function(path) {
-  # 4 metadata rows then column header on row 5
+
   df <- readr::read_csv(path, skip = 4, show_col_types = FALSE,
                         col_names = c("month_str", "us_exports_kb_month"))
   df |>
@@ -132,14 +30,9 @@ suppressPackageStartupMessages({
     dplyr::arrange(date)
 }
 
-# --------------------------------------------------------------------------
-# Reader 2: PEMEX imports - extract "Gasolinas b" row
-# --------------------------------------------------------------------------
-
 .read_pemex_imports <- function(path) {
   lines <- readr::read_lines(path, locale = readr::locale(encoding = "latin1"))
 
-  # Locate the month-header row ("Ene/2016") and the gasoline data row
   month_row_idx <- which(stringr::str_detect(lines, "Ene/2016"))[1]
   gas_row_idx   <- which(stringr::str_detect(lines, "Gasolinas"))[1]
 
@@ -154,11 +47,9 @@ suppressPackageStartupMessages({
   months <- parse_csv_line(lines[month_row_idx])
   vals   <- parse_csv_line(lines[gas_row_idx])
 
-  # First element of each row is an empty placeholder / product name
   month_labels <- months[-1]
   val_labels   <- vals[-1]
 
-  # Align lengths (trailing empty columns can differ)
   n <- min(length(month_labels), length(val_labels))
   month_labels <- month_labels[seq_len(n)]
   val_labels   <- val_labels[seq_len(n)]
@@ -174,13 +65,13 @@ suppressPackageStartupMessages({
       month   = .SPANISH_MONTHS[mo_abbr],
       year    = suppressWarnings(as.integer(yr_str)),
       date    = lubridate::make_date(year, month, 1L),
-      # N/D → NA; 0.0 in last provisional month → NA
+
       mbd     = suppressWarnings(as.numeric(
         dplyr::if_else(raw_val %in% c("N/D", ""), NA_character_, raw_val)
       )),
-      # Exclude final provisional 0.0 entries
+
       mbd     = dplyr::if_else(mbd == 0 & !is.na(mbd), NA_real_, mbd),
-      # Convert Mbd (thousand barrels/day) → kb/month (thousand barrels/month)
+
       days_in_month          = lubridate::days_in_month(date),
       pemex_gasolinas_kb_month = mbd * days_in_month
     ) |>
@@ -189,10 +80,6 @@ suppressPackageStartupMessages({
 
   df
 }
-
-# --------------------------------------------------------------------------
-# Reader 3: Mexico imports by country (2024)
-# --------------------------------------------------------------------------
 
 .read_country_shares <- function(path) {
   df <- readr::read_csv(path, show_col_types = FALSE)
@@ -209,10 +96,9 @@ suppressPackageStartupMessages({
   total_value <- sum(df$`Trade Value`, na.rm = TRUE)
   computed_share_decimal <- usa_value / total_value
 
-  # Share column may be in % units (0-100) or decimal (0-1); detect and normalise
   raw_share <- usa_row$Share[1]
   if (raw_share > 1) {
-    # Column is in percentage points (e.g., 92.77); convert to decimal
+
     usa_share <- raw_share / 100
   } else {
     usa_share <- raw_share
@@ -247,10 +133,6 @@ suppressPackageStartupMessages({
   )
 }
 
-# --------------------------------------------------------------------------
-# Diagnostics table
-# --------------------------------------------------------------------------
-
 .print_diagnostics <- function(eia, pemex, shares) {
   message("\n=== SOURCE DIAGNOSTICS ===")
   message(sprintf("  EIA:   %d months, %s to %s",
@@ -282,25 +164,21 @@ suppressPackageStartupMessages({
   message("=========================\n")
 }
 
-# --------------------------------------------------------------------------
-# Gap construction
-# --------------------------------------------------------------------------
-
 .build_gap <- function(eia, pemex, usa_share) {
-  # Inner join on date (overlap period only)
+
   gap <- eia |>
     dplyr::inner_join(pemex |> dplyr::select(date, pemex_gasolinas_kb_month),
                       by = "date") |>
     dplyr::filter(!is.na(us_exports_kb_month), !is.na(pemex_gasolinas_kb_month)) |>
     dplyr::mutate(
       usa_share_2024 = usa_share,
-      # Implied Mexico imports from US = total PEMEX × USA share
+
       implied_us_source_kb_month = pemex_gasolinas_kb_month * usa_share,
-      # raw gap: US exports minus Mexico TOTAL recorded imports (all sources)
+
       raw_gap_kb_month = us_exports_kb_month - pemex_gasolinas_kb_month,
-      # adjusted gap: US exports minus implied Mexico imports from US
+
       adjusted_gap_kb_month = us_exports_kb_month - implied_us_source_kb_month,
-      # Percentage gap relative to US exports
+
       raw_gap_pct      = 100 * raw_gap_kb_month      / us_exports_kb_month,
       adjusted_gap_pct = 100 * adjusted_gap_kb_month / us_exports_kb_month
     ) |>
@@ -319,10 +197,6 @@ suppressPackageStartupMessages({
 
   gap
 }
-
-# --------------------------------------------------------------------------
-# Cover page helper (plain-text methodology page, same style as elasticity PDF)
-# --------------------------------------------------------------------------
 
 .make_gap_cover_page <- function(gap, usa_share) {
   n   <- nrow(gap)
@@ -415,10 +289,6 @@ suppressPackageStartupMessages({
     )
 }
 
-# --------------------------------------------------------------------------
-# Plots - multi-page PDF: cover + one full page per graph
-# --------------------------------------------------------------------------
-
 .plot_import_gap <- function(gap, usa_share, out_pdf) {
   dir.create(dirname(out_pdf), recursive = TRUE, showWarnings = FALSE)
 
@@ -438,7 +308,6 @@ suppressPackageStartupMessages({
       plot.margin       = ggplot2::margin(14, 18, 14, 14)
     )
 
-  # --- Graph 1: Two raw series side-by-side ---
   p1 <- ggplot2::ggplot(gap, ggplot2::aes(x = date)) +
     ggplot2::geom_line(ggplot2::aes(y = us_exports_kb_month,
                                     colour = "U.S. exports (EIA)"),
@@ -477,7 +346,6 @@ suppressPackageStartupMessages({
     ) +
     base_theme
 
-  # --- Graph 2: Bilateral comparison (apples-to-apples) ---
   p2 <- ggplot2::ggplot(gap, ggplot2::aes(x = date)) +
     ggplot2::geom_line(ggplot2::aes(y = us_exports_kb_month,
                                     colour = "U.S. exports (EIA)"),
@@ -519,7 +387,6 @@ suppressPackageStartupMessages({
     ) +
     base_theme
 
-  # --- Graph 3: Raw gap ---
   raw_mean <- mean(gap$raw_gap_kb_month)
   p3 <- ggplot2::ggplot(gap, ggplot2::aes(x = date, y = raw_gap_kb_month)) +
     ggplot2::geom_hline(yintercept = 0, colour = "grey30", linewidth = 0.6,
@@ -559,7 +426,6 @@ suppressPackageStartupMessages({
     base_theme +
     ggplot2::theme(legend.position = "none")
 
-  # --- Graph 4: Adjusted gap ---
   adj_mean <- mean(gap$adjusted_gap_kb_month)
   pos_n    <- sum(gap$adjusted_gap_kb_month > 0)
   p4 <- ggplot2::ggplot(gap, ggplot2::aes(x = date, y = adjusted_gap_kb_month)) +
@@ -603,7 +469,6 @@ suppressPackageStartupMessages({
     base_theme +
     ggplot2::theme(legend.position = "none")
 
-  # --- Write multi-page PDF ---
   grDevices::pdf(out_pdf, width = 11, height = 8.5, onefile = TRUE)
   print(.make_gap_cover_page(gap, usa_share))
   print(p1)
@@ -616,10 +481,6 @@ suppressPackageStartupMessages({
   out_pdf
 }
 
-# --------------------------------------------------------------------------
-# Short interpretation note
-# --------------------------------------------------------------------------
-
 .write_interpretation <- function(gap, shares, out_txt) {
   dir.create(dirname(out_txt), recursive = TRUE, showWarnings = FALSE)
 
@@ -629,7 +490,6 @@ suppressPackageStartupMessages({
   med_adj     <- median(gap$adjusted_gap_kb_month)
   mean_raw    <- mean(gap$raw_gap_kb_month)
 
-  # Split by period for trend description
   recent <- gap |> dplyr::filter(lubridate::year(date) >= 2020)
   early  <- gap |> dplyr::filter(lubridate::year(date) < 2020)
 
@@ -720,20 +580,16 @@ suppressPackageStartupMessages({
   out_txt
 }
 
-# --------------------------------------------------------------------------
-# Main function
-# --------------------------------------------------------------------------
-
 process_gasoline_imports_gap <- function(
   eia_csv     = "data/raw_public/U.S._Exports_to_Mexico_of_Finished_Motor_Gasoline.csv",
-  pemex_csv   = NULL,   # auto-detected if NULL
-  country_csv = NULL,   # auto-detected if NULL
+  pemex_csv   = NULL,
+  country_csv = NULL,
   out_parquet = "data/processed/imports_gap/gasoline_imports_gap.parquet",
   out_csv     = "data/processed/imports_gap/gasoline_imports_gap.csv",
   out_pdf     = "outputs/imports_gap/import_gap_plots.pdf",
   out_txt     = "outputs/imports_gap/interpretation_note.txt"
 ) {
-  # --- Auto-detect file paths if not supplied ---
+
   raw_dir <- "data/raw_public"
 
   if (is.null(pemex_csv)) {
@@ -757,32 +613,26 @@ process_gasoline_imports_gap <- function(
   dir.create(dirname(out_parquet), recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(out_pdf),     recursive = TRUE, showWarnings = FALSE)
 
-  # --- Step 1: read all three sources ---
   message("=== Step 1: read sources ===")
   eia    <- .read_eia_exports(eia_csv)
   pemex  <- .read_pemex_imports(pemex_csv)
   shares <- .read_country_shares(country_csv)
 
-  # --- Step 2: diagnostics ---
   message("=== Step 2: source diagnostics ===")
   .print_diagnostics(eia, pemex, shares)
 
-  # --- Step 3: build gap ---
   message("=== Step 3: build gap measures ===")
   gap <- .build_gap(eia, pemex, shares$usa_share_2024)
 
-  # --- Step 4: write data outputs ---
   message("=== Step 4: write outputs ===")
   arrow::write_parquet(gap, out_parquet, compression = "zstd")
   readr::write_csv(gap, out_csv)
   message(sprintf("  Parquet: %s", out_parquet))
   message(sprintf("  CSV:     %s", out_csv))
 
-  # --- Step 5: plots ---
   message("=== Step 5: plots ===")
   .plot_import_gap(gap, shares$usa_share_2024, out_pdf)
 
-  # --- Step 6: interpretation note ---
   message("=== Step 6: interpretation note ===")
   .write_interpretation(gap, shares, out_txt)
 

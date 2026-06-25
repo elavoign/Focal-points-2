@@ -8,7 +8,6 @@ station_id <- function(x) {
 
   s <- str_squish(s)
 
-  # quitar comillas al inicio/fin (casos típicos al leer csv mal formateado)
   s <- str_remove_all(s, '^"+|"+$')
   s <- str_remove_all(s, "^'+|'+$")
 

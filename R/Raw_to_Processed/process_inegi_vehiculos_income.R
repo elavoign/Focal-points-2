@@ -6,17 +6,6 @@ suppressPackageStartupMessages({
   library(readr)
 })
 
-# --------------------------------------------------------------------------
-# Process one state's Viviendas CSV
-# --------------------------------------------------------------------------
-# AUTOPROP coding in INEGI Censo 2020 Ampliado (CA):
-#   7 = sí tiene automóvil propio
-#   8 = no tiene
-#   9 = no especificado
-# INGTRHOG: ingreso trimestral del hogar en pesos corrientes
-#   999999 = no especificado (exclude)
-#   0      = may be genuine zero; excluded to avoid distorting the mean
-
 .process_one_state_income <- function(viviendas_csv) {
   d <- readr::read_csv(viviendas_csv, show_col_types = FALSE) |>
     dplyr::select(ENT, MUN, FACTOR, AUTOPROP, INGTRHOG) |>
@@ -34,7 +23,6 @@ suppressPackageStartupMessages({
       !is.na(FACTOR),   FACTOR   > 0
     )
 
-  # --- Conditional mean: car-owning households only ---
   income_cond <- d |>
     dplyr::filter(AUTOPROP == 7L) |>
     dplyr::group_by(CVEGEO) |>
@@ -44,7 +32,6 @@ suppressPackageStartupMessages({
       .groups = "drop"
     )
 
-  # --- Unconditional mean (robustness) ---
   income_uncond <- d |>
     dplyr::group_by(CVEGEO) |>
     dplyr::summarise(
@@ -55,10 +42,6 @@ suppressPackageStartupMessages({
 
   dplyr::full_join(income_cond, income_uncond, by = "CVEGEO")
 }
-
-# --------------------------------------------------------------------------
-# Main wrapper — loops over all 31 state folders
-# --------------------------------------------------------------------------
 
 process_inegi_vehiculos_income <- function(
   vehiculos_dir = "data/raw_public/Inegi Vehiculos",

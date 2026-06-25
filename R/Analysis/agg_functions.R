@@ -6,7 +6,6 @@ suppressPackageStartupMessages({
 
 REFORM_DATE <- as.Date("2025-03-03")
 
-# Variables que pediste para (1) y (2)
 vars_level_cvegeo <- c(
   "station_regular","station_premium","station_diesel",
   "terminal_regular","terminal_premium","terminal_diesel",
@@ -16,32 +15,27 @@ vars_level_cvegeo <- c(
   "spread_retail_terminal_diesel","spread_retail_terminal_premium","spread_retail_terminal_regular"
 )
 
-# Variables de spreads para (3)
 vars_spreads_station <- c(
   "spread_retail_int_diesel","spread_retail_int_regular",
   "spread_terminal_int_diesel","spread_terminal_int_regular",
   "spread_retail_terminal_diesel","spread_retail_terminal_premium","spread_retail_terminal_regular"
 )
 
-# Variables de precios crudos a nivel estación
 vars_prices_station <- c(
   "station_regular",
   "station_premium",
   "station_diesel"
 )
 
-# Variables de spreads para (4) y (5)
 vars_spreads_terminal <- c(
   "spread_retail_int_diesel","spread_retail_int_regular",
   "spread_retail_terminal_diesel","spread_retail_terminal_premium","spread_retail_terminal_regular"
 )
 
-# Helper: recorta columnas a las que existan (evita tronar si falta alguna)
 keep_existing <- function(df, cols) {
   cols[cols %in% names(df)]
 }
 
-# NUEVO: helper para definir ventanas pre/post
 get_prepost_window <- function(cut = REFORM_DATE, window_months = 1L) {
   list(
     pre_start  = cut %m-% months(window_months),
@@ -51,12 +45,11 @@ get_prepost_window <- function(cut = REFORM_DATE, window_months = 1L) {
   )
 }
 
-# (1) Diario por CVEGEO, por año
 agg_daily_cvegeo_one_year <- function(in_parquet, year, out_dir) {
   out <- file.path(out_dir, sprintf("year=%d", year), "daily_cvegeo.parquet")
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
 
-  df <- arrow::read_parquet(in_parquet) |> as_tibble()
+  df <- arrow::read_parquet(in_parquet) |> as_tibble(, mmap = FALSE)
 
   if (!"date" %in% names(df) && "Fecha" %in% names(df)) {
     df <- df |> rename(date = Fecha)
@@ -75,7 +68,6 @@ agg_daily_cvegeo_one_year <- function(in_parquet, year, out_dir) {
   out
 }
 
-# (2) Promedio pre/post por CVEGEO usando la salida de (1)
 agg_prepost_cvegeo_from_daily <- function(daily_cvegeo_files, out_path, window_months = 1L) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -103,8 +95,6 @@ agg_prepost_cvegeo_from_daily <- function(daily_cvegeo_files, out_path, window_m
   out_path
 }
 
-# (3) Promedio pre/post por estación (station_id) usando la base final (spreads_station_day)
-# Solo spreads
 agg_prepost_station_spreads <- function(spreads_station_day_files, out_path, window_months = 1L) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -148,8 +138,6 @@ agg_prepost_station_spreads <- function(spreads_station_day_files, out_path, win
   out_path
 }
 
-# (3b) Promedio pre/post por estación (station_id) usando la base final (spreads_station_day)
-# Solo precios crudos de estación
 agg_prepost_station_prices <- function(spreads_station_day_files, out_path, window_months = 1L) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -196,9 +184,6 @@ agg_prepost_station_prices <- function(spreads_station_day_files, out_path, wind
   out_path
 }
 
-# (3c) Base por estación para graficar distribuciones de PRECIOS por cuartil
-# Calcula promedio pre y post para UNA variable de precio,
-# y asigna cuartil usando el precio PRE.
 agg_station_price_quantiles <- function(spreads_station_day_files,
                                         price_var = "station_regular",
                                         out_path,

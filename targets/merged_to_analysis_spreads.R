@@ -1,5 +1,3 @@
-# targets/merged_to_analysis_spreads.R
-
 suppressPackageStartupMessages({
   library(targets)
 })

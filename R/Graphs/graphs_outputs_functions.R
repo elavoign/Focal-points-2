@@ -4,7 +4,7 @@ suppressPackageStartupMessages({
   library(arrow)
   library(ggplot2)
   library(scales)
-  library(grid)   # unit()
+  library(grid)
 })
 
 REFORM_DATE <- as.Date("2025-03-03")
@@ -14,9 +14,6 @@ ensure_dir <- function(path) {
   path
 }
 
-# -----------------------------
-# Styling helpers
-# -----------------------------
 theme_pub <- function() {
   theme_minimal(base_size = 12) +
     theme(
@@ -132,9 +129,6 @@ plot_density_overlay_pretty <- function(df_pre, df_post, xvar, title, subtitle, 
   save_png(out_path, p, w = 9.5, h = 4, dpi = 220)
 }
 
-# -----------------------------
-# (1) National time series (2 charts)
-# -----------------------------
 make_national_price_timeseries <- function(daily_cvegeo_files,
                                           out_dir = "outputs/graphs/national_prices") {
   ensure_dir(out_dir)
@@ -215,9 +209,6 @@ make_national_price_timeseries <- function(daily_cvegeo_files,
   c(plot_ts(nat, "regular"), plot_ts(nat, "diesel"))
 }
 
-# -----------------------------
-# (2)-(5) Station distributions: spreads
-# -----------------------------
 spread_vars_from_station_prepost <- function(df) {
   v <- names(df)
   v[grepl("^spread_", v)]
@@ -232,7 +223,7 @@ make_station_spread_distributions_all <- function(prepost_station_parquet,
   ensure_dir(file.path(out_dir, "overlay"))
   ensure_dir(file.path(out_dir, "diff"))
 
-  df <- arrow::read_parquet(prepost_station_parquet) %>% as_tibble()
+  df <- arrow::read_parquet(prepost_station_parquet) %>% as_tibble(, mmap = FALSE)
 
   if (!("period" %in% names(df))) stop("Station pre/post parquet missing 'period' column.")
   if (!("station_id" %in% names(df))) stop("Station pre/post parquet missing 'station_id' column.")
@@ -312,9 +303,6 @@ make_station_spread_distributions_all <- function(prepost_station_parquet,
   outs
 }
 
-# -----------------------------
-# Station distributions for raw prices
-# -----------------------------
 price_vars_from_station_prepost <- function(df) {
   wanted <- c("station_regular", "station_premium", "station_diesel")
   wanted[wanted %in% names(df)]
@@ -338,7 +326,7 @@ make_station_price_distributions_all <- function(prepost_station_price_parquet,
   ensure_dir(file.path(out_dir, "overlay"))
   ensure_dir(file.path(out_dir, "diff"))
 
-  df <- arrow::read_parquet(prepost_station_price_parquet) %>% as_tibble()
+  df <- arrow::read_parquet(prepost_station_price_parquet) %>% as_tibble(, mmap = FALSE)
 
   if (!("period" %in% names(df))) stop("Station price pre/post parquet missing 'period' column.")
   if (!("station_id" %in% names(df))) stop("Station price pre/post parquet missing 'station_id' column.")
@@ -419,9 +407,6 @@ make_station_price_distributions_all <- function(prepost_station_price_parquet,
   outs
 }
 
-# -----------------------------
-# (6)-(9) Terminal vs international distributions
-# -----------------------------
 make_terminal_int_distributions <- function(prepost_terminal_parquet,
                                             out_dir = "outputs/graphs/terminal_int",
                                             window_months = 1L) {
@@ -431,7 +416,7 @@ make_terminal_int_distributions <- function(prepost_terminal_parquet,
   ensure_dir(file.path(out_dir, "overlay"))
   ensure_dir(file.path(out_dir, "diff"))
 
-  df <- arrow::read_parquet(prepost_terminal_parquet) %>% as_tibble()
+  df <- arrow::read_parquet(prepost_terminal_parquet) %>% as_tibble(, mmap = FALSE)
 
   if (!("period" %in% names(df))) stop("Terminal pre/post parquet missing 'period' column.")
   if (!("terminal_id" %in% names(df))) stop("Terminal pre/post parquet missing 'terminal_id' column.")
@@ -515,10 +500,6 @@ make_terminal_int_distributions <- function(prepost_terminal_parquet,
   )
 }
 
-# -----------------------------
-# Overlay de distribuciones de precios por cuartil
-# usando la base station_*_quantiles.parquet
-# -----------------------------
 pretty_quantile_label <- function(x) {
   dplyr::case_when(
     x == "0-25"   ~ "0 to 25 percentile",
@@ -534,7 +515,7 @@ make_station_price_quantile_overlays <- function(station_quantiles_parquet,
                                                  window_months = 1L) {
   ensure_dir(out_dir)
 
-  df <- arrow::read_parquet(station_quantiles_parquet) %>% as_tibble()
+  df <- arrow::read_parquet(station_quantiles_parquet) %>% as_tibble(, mmap = FALSE)
 
   needed <- c("station_id", "price_pre", "price_post", "quantile_label", "price_var")
   miss <- setdiff(needed, names(df))

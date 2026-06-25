@@ -1,5 +1,3 @@
-# R/Raw_to_Processed/process_stations.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(stringr)
@@ -46,7 +44,7 @@ process_stations <- function(in_rda, out_parquet) {
     mutate(
       flag_missing_region_wholesale_pemex =
         is.na(region_wholesale_pemex) | str_trim(region_wholesale_pemex) == "",
-      flag_missing_terminal_id = is.na(terminal_id), 
+      flag_missing_terminal_id = is.na(terminal_id),
       flag_missing_cvegeo_mun = is.na(CVEGEO) | CVEGEO == "000NA" | CVEGEO == "00000"
     )
 

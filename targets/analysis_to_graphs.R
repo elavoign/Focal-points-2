@@ -10,7 +10,6 @@ analysis_to_graphs <- function() {
       format = "file"
     ),
 
-    # (1) Series nacionales (Regular y Diesel) - no dependen de la ventana
     tar_target(
       national_price_graphs_png,
       {
@@ -26,10 +25,6 @@ analysis_to_graphs <- function() {
       format = "file",
       iteration = "list"
     ),
-
-    # -----------------------------
-    # 1 mes
-    # -----------------------------
 
     tar_target(
       station_spread_distributions_png_1m,
@@ -116,10 +111,6 @@ analysis_to_graphs <- function() {
       iteration = "list"
     ),
 
-    # -----------------------------
-    # 3 meses
-    # -----------------------------
-
     tar_target(
       station_spread_distributions_png_3m,
       {
@@ -204,10 +195,6 @@ analysis_to_graphs <- function() {
       format = "file",
       iteration = "list"
     ),
-
-    # -----------------------------
-    # 6 meses
-    # -----------------------------
 
     tar_target(
       station_spread_distributions_png_6m,

@@ -5,9 +5,6 @@ suppressPackageStartupMessages({
 shaun_pooled_regression <- function() {
   list(
 
-    # ------------------------------------------------------------------
-    # 1. IEPS monthly series (from Excel — runs with partial data too)
-    # ------------------------------------------------------------------
     tar_target(
       ieps_xlsx,
       "data/raw_public/IEPS_Combustibles_Mexico.xlsx",
@@ -25,9 +22,6 @@ shaun_pooled_regression <- function() {
       format = "file"
     ),
 
-    # ------------------------------------------------------------------
-    # 2. Bloomberg Gulf Coast gasoline spot prices (Regular 87 + Premium 93)
-    # ------------------------------------------------------------------
     tar_target(
       bloomberg_xlsx,
       "data/raw_public/GASOLINE.xlsx",
@@ -45,9 +39,6 @@ shaun_pooled_regression <- function() {
       format = "file"
     ),
 
-    # ------------------------------------------------------------------
-    # 3. Municipal income conditional on car ownership (INEGI Vehículos)
-    # ------------------------------------------------------------------
     tar_target(
       income_car_owners_parquet,
       process_inegi_vehiculos_income(
@@ -57,16 +48,13 @@ shaun_pooled_regression <- function() {
       format = "file"
     ),
 
-    # ------------------------------------------------------------------
-    # 3b. Spread diagnostic plots (Shaun Point 2)
-    #     Absolute and relative spread vs. price level for PEMEX terminal
-    #     and Bloomberg Gulf Coast data.
-    # ------------------------------------------------------------------
     tar_target(
       spread_diagnostic_outputs,
       {
+        mun_month_poverty_parquet
         bloomberg_gasoline_parquet
         build_spread_diagnostic_plots(
+          base_parquet      = mun_month_poverty_parquet,
           bloomberg_parquet = bloomberg_gasoline_parquet,
           terminal_dir      = "data/processed/terminal",
           out_dir           = "outputs/shaun/spread_diagnostics"
@@ -75,12 +63,10 @@ shaun_pooled_regression <- function() {
       format = "file"
     ),
 
-    # ------------------------------------------------------------------
-    # 4. Results PDF (updated — all specs + spread diagnostics)
-    # ------------------------------------------------------------------
     tar_target(
       results_updated_pdf,
       {
+        pooled_regression_outputs
         mun_month_poverty_parquet
         ieps_monthly_parquet
         income_car_owners_parquet
@@ -91,19 +77,17 @@ shaun_pooled_regression <- function() {
           income_parquet       = income_car_owners_parquet,
           terminal_dir         = "data/processed/terminal",
           bloomberg_parquet    = bloomberg_gasoline_parquet,
-          out_path             = "outputs/shaun/results_updated.pdf"
+          out_path             = "outputs/shaun/results_updated.pdf",
+          precomputed_dir      = "outputs/shaun/pooled_regression"
         )
       },
       format = "file"
     ),
 
-    # ------------------------------------------------------------------
-    # 5a. Pooled regressions — full sample
-    # ------------------------------------------------------------------
     tar_target(
       pooled_regression_outputs,
       {
-        mun_month_poverty_parquet   # upstream dependency
+        mun_month_poverty_parquet
         ieps_monthly_parquet
         income_car_owners_parquet
         bloomberg_gasoline_parquet
@@ -119,11 +103,6 @@ shaun_pooled_regression <- function() {
       format = "file"
     ),
 
-    # ------------------------------------------------------------------
-    # 4b. Pooled regressions — restricted sample
-    #     Excludes states with large informal gasoline markets:
-    #     07 Chiapas | 12 Guerrero | 20 Oaxaca | 21 Puebla
-    # ------------------------------------------------------------------
     tar_target(
       pooled_regression_restricted_outputs,
       {

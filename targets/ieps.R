@@ -1,4 +1,3 @@
-# targets/ieps.R
 suppressPackageStartupMessages({
   library(targets)
   library(dplyr)
@@ -7,13 +6,12 @@ suppressPackageStartupMessages({
 
 ieps_targets <- function() {
   list(
-    # 1) URL (por ahora solo 1 link)
+
     tar_target(
       ieps_url_single,
       "https://sidof.segob.gob.mx/notas/docFuente/5467667"
     ),
 
-    # 2) CSV final (archivo) -> 3 filas (combustibles) x N métricas (columnas)
     tar_target(
       ieps_csv_single,
       ieps_html_to_csv(
@@ -23,7 +21,6 @@ ieps_targets <- function() {
       format = "file"
     ),
 
-    # 3) QA rápido: imprime/guarda un resumen pequeño para verificar estructura
     tar_target(
       ieps_csv_single_qa,
       {

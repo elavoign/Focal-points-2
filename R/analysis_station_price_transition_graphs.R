@@ -1,5 +1,3 @@
-# R/analysis_station_price_transition_graphs.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)
@@ -110,7 +108,7 @@ build_transition_matrix_graphs_for_window <- function(
   parquet_file,
   out_dir_base = "outputs/station_price_transition_graphs"
 ) {
-  df_transitions <- arrow::read_parquet(parquet_file)
+  df_transitions <- arrow::read_parquet(parquet_file, mmap = FALSE)
 
   window_months_i <- unique(df_transitions$window_months)
   if (length(window_months_i) != 1) {

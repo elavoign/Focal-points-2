@@ -5,7 +5,6 @@ suppressPackageStartupMessages({
 analysis_aggregations <- function() {
   list(
 
-    # (1) Diario por CVEGEO (por año)
     tar_target(
       daily_cvegeo_parquets,
       {
@@ -31,10 +30,6 @@ analysis_aggregations <- function() {
       format = "file",
       iteration = "list"
     ),
-
-    # -----------------------------
-    # 1 mes
-    # -----------------------------
 
     tar_target(
       prepost_cvegeo_parquet_1m,
@@ -117,10 +112,6 @@ analysis_aggregations <- function() {
       format = "file"
     ),
 
-    # -----------------------------
-    # 3 meses
-    # -----------------------------
-
     tar_target(
       prepost_cvegeo_parquet_3m,
       {
@@ -201,10 +192,6 @@ analysis_aggregations <- function() {
       },
       format = "file"
     ),
-
-    # -----------------------------
-    # 6 meses
-    # -----------------------------
 
     tar_target(
       prepost_cvegeo_parquet_6m,

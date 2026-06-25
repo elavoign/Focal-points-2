@@ -1,5 +1,3 @@
-# R/Graphs/inegi_ebitda_graphs.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(ggplot2)
@@ -13,14 +11,8 @@ plot_inegi_ebitda_panels <- function(
   out_dir = "outputs/graphs/inegi_ebitda"
 ) {
 
-  # =========================
-  # 1. Read data
-  # =========================
-  df <- arrow::read_parquet(in_parquet)
+  df <- arrow::read_parquet(in_parquet, mmap = FALSE)
 
-  # =========================
-  # 2. Clean sample
-  # =========================
   df <- df |>
     filter(
       !is.na(year),
@@ -33,9 +25,6 @@ plot_inegi_ebitda_panels <- function(
     ) |>
     arrange(entidad, year)
 
-  # =========================
-  # 3. Manual north-to-south order
-  # =========================
   state_order <- c(
     "00 Total nacional",
     "02 Baja California",
@@ -93,23 +82,14 @@ plot_inegi_ebitda_panels <- function(
     stop("No rows left after matching entidad names with state_order.")
   }
 
-  # =========================
-  # 4. Fixed y-axis limits
-  # =========================
   ebitda_min <- 0
   ebitda_max <- 150000
 
   ratio_min <- 0
   ratio_max <- 0.7
 
-  # =========================
-  # 5. Create output folder
-  # =========================
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-  # =========================
-  # 6. EBITDA plot
-  # =========================
   p_ebitda <- ggplot(
     df,
     aes(x = year, y = ebitda, group = 1, color = line_color)
@@ -152,9 +132,6 @@ plot_inegi_ebitda_panels <- function(
     dpi = 300
   )
 
-  # =========================
-  # 7. EBITDA / Revenue plot
-  # =========================
   p_ratio <- ggplot(
     df,
     aes(x = year, y = ebitda_revenue, group = 1, color = line_color)

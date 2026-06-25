@@ -1,5 +1,3 @@
-# R/analysis_regular_break_2399.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)
@@ -78,7 +76,7 @@ read_one_spreads_station_day_year_break2399 <- function(
     return(NULL)
   }
 
-  arrow::read_parquet(file)
+  arrow::read_parquet(file, mmap = FALSE)
 }
 
 read_spreads_station_day_break2399 <- function(

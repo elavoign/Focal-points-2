@@ -1,6 +1,3 @@
-# R/Raw_to_Processed/process_volumes.R
-# See README_INTERNAL.md §5 Capa 1G for matching strategy and design decisions.
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
@@ -11,10 +8,6 @@ suppressPackageStartupMessages({
   library(purrr)
 })
 
-# ---------------------------------------------------------------------------
-# Internal: text normalization
-# ---------------------------------------------------------------------------
-
 .normalize_vol_name <- function(x) {
   x <- iconv(x, from = "UTF-8", to = "ASCII//TRANSLIT")
   x <- toupper(x)
@@ -22,11 +15,6 @@ suppressPackageStartupMessages({
   x <- gsub("\\s+",       " ", x)
   trimws(x)
 }
-
-# ---------------------------------------------------------------------------
-# Internal: CSV entidad → CVE_ENT (2-digit, zero-padded)
-# Covers all 32 CSV state names exactly as they appear in the source file.
-# ---------------------------------------------------------------------------
 
 .build_state_map <- function() {
   c(
@@ -65,39 +53,20 @@ suppressPackageStartupMessages({
   )
 }
 
-# ---------------------------------------------------------------------------
-# Internal: hardcoded overrides
-# Key format: "<CVE_ENT>|<normalized_CSV_municipio_name>"
-# Value: correct CVEGEO
-# ---------------------------------------------------------------------------
-
 .OVERRIDES_VOL <- c(
   "11|SAN JOSE ITURBIDE"    = "11032",
-  # INEGI full name: "San José de Iturbide"
-  # CSV drops the "de": "San José Iturbide"
 
   "20|JUCHITAN DE ZARAGOZA" = "20043",
-  # INEGI full name: "Heroica Ciudad de Juchitán de Zaragoza"
-  # CSV uses short name: "Juchitán de Zaragoza"
 
   "23|SOLIDARIDAD"          = "23008"
-  # Municipality renamed to "Playa del Carmen" in INEGI 2024 shapefile.
-  # CSV records prior to 2024 still use "Solidaridad".
-)
 
-# ---------------------------------------------------------------------------
-# Internal: Spanish month name → integer
-# ---------------------------------------------------------------------------
+)
 
 .MONTH_MAP_VOL <- c(
   "Enero" = 1L, "Febrero" = 2L, "Marzo" = 3L, "Abril" = 4L,
   "Mayo"  = 5L, "Junio"   = 6L, "Julio" = 7L, "Agosto" = 8L,
   "Septiembre" = 9L, "Octubre" = 10L, "Noviembre" = 11L, "Diciembre" = 12L
 )
-
-# ---------------------------------------------------------------------------
-# Main function
-# ---------------------------------------------------------------------------
 
 process_volumes <- function(
   in_csv      = "data/raw_public/04_volumenes_venta_expendio_petroliferos.csv",
@@ -106,7 +75,6 @@ process_volumes <- function(
 ) {
   state_map <- .build_state_map()
 
-  # --- Build INEGI municipality lookup (CVE_ENT, NOMGEO_norm) → CVEGEO ---
   mun_lookup <- sf::st_read(mun_shp, quiet = TRUE) |>
     sf::st_drop_geometry() |>
     dplyr::transmute(
@@ -115,13 +83,11 @@ process_volumes <- function(
       NOMGEO_norm = .normalize_vol_name(as.character(NOMGEO))
     )
 
-  # --- Read and filter: Regular and Premium only ---
   df_raw <- readr::read_csv(in_csv, show_col_types = FALSE, progress = FALSE) |>
     dplyr::filter(subproducto %in% c("Regular", "Premium"))
 
   n_raw <- nrow(df_raw)
 
-  # --- Parse month and year ---
   df_raw <- df_raw |>
     dplyr::mutate(
       month = .MONTH_MAP_VOL[mes],
@@ -133,7 +99,6 @@ process_volumes <- function(
     stop("Unknown 'mes' values: ", paste(unique(bad_mes), collapse = ", "))
   }
 
-  # --- Map state → CVE_ENT ---
   df_raw <- df_raw |>
     dplyr::mutate(CVE_ENT = state_map[entidad])
 
@@ -142,7 +107,6 @@ process_volumes <- function(
     stop("Unmapped entidad values: ", paste(bad_states, collapse = ", "))
   }
 
-  # --- Drop multi-municipality rows (comma-separated) ---
   is_multi  <- grepl(",", df_raw$municipios)
   n_multi   <- sum(is_multi)
   df_raw    <- df_raw[!is_multi, ]
@@ -150,25 +114,21 @@ process_volumes <- function(
   message(sprintf("  Multi-mun rows dropped:           %d (%.1f%%)",
                   n_multi, 100 * n_multi / n_raw))
 
-  # --- Normalize municipality names ---
   df_raw <- df_raw |>
     dplyr::mutate(municipios_norm = .normalize_vol_name(municipios))
 
-  # --- Primary match: (CVE_ENT, normalized name) → CVEGEO ---
   df_matched <- df_raw |>
     dplyr::left_join(
       mun_lookup,
       by = c("CVE_ENT", "municipios_norm" = "NOMGEO_norm")
     )
 
-  # --- Apply overrides for known name discrepancies ---
   override_key    <- paste(df_matched$CVE_ENT, df_matched$municipios_norm, sep = "|")
   override_vals   <- .OVERRIDES_VOL[override_key]
   to_override     <- !is.na(override_vals)
   n_overrides     <- sum(to_override)
   df_matched$CVEGEO[to_override] <- override_vals[to_override]
 
-  # --- Validation report ---
   n_total    <- nrow(df_matched)
   n_matched  <- sum(!is.na(df_matched$CVEGEO))
   n_unmatched <- n_total - n_matched
@@ -191,10 +151,8 @@ process_volumes <- function(
     }
   }
 
-  # Drop unmatched rows
   df_matched <- df_matched |> dplyr::filter(!is.na(CVEGEO))
 
-  # --- Aggregate to (CVEGEO, year, month, subproducto) ---
   df_agg <- df_matched |>
     dplyr::group_by(CVEGEO, year, month, subproducto) |>
     dplyr::summarise(
@@ -202,7 +160,6 @@ process_volumes <- function(
       .groups  = "drop"
     )
 
-  # --- Pivot wide: one row per (CVEGEO, year, month) ---
   df_wide <- df_agg |>
     tidyr::pivot_wider(
       names_from  = subproducto,
@@ -210,7 +167,6 @@ process_volumes <- function(
       values_fill = NA_real_
     )
 
-  # Rename and ensure both columns exist
   if ("Regular" %in% names(df_wide)) {
     df_wide <- df_wide |> dplyr::rename(regular_volume_l = Regular)
   } else {

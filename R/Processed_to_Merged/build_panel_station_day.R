@@ -1,5 +1,3 @@
-# R/Processed_to_Merged/build_panel_station_day.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)
@@ -9,19 +7,19 @@ suppressPackageStartupMessages({
 })
 
 read_retail_year <- function(year) {
-  arrow::read_parquet(sprintf("data/processed/retail/year=%d/retail.parquet", year))
+  arrow::read_parquet(sprintf("data/processed/retail/year=%d/retail.parquet", year), mmap = FALSE)
 }
 
 read_terminal_year <- function(year) {
-  arrow::read_parquet(sprintf("data/processed/terminal/year=%d/terminal.parquet", year))
+  arrow::read_parquet(sprintf("data/processed/terminal/year=%d/terminal.parquet", year), mmap = FALSE)
 }
 
 read_international_year <- function(year) {
-  arrow::read_parquet(sprintf("data/processed/international/year=%d/international.parquet", year))
+  arrow::read_parquet(sprintf("data/processed/international/year=%d/international.parquet", year), mmap = FALSE)
 }
 
 read_stations <- function() {
-  arrow::read_parquet("data/processed/stations/stations.parquet")
+  arrow::read_parquet("data/processed/stations/stations.parquet", mmap = FALSE)
 }
 
 build_panel_station_day_year <- function(year, out_dir = "data/merged/panel_station_day") {
@@ -41,7 +39,6 @@ build_panel_station_day_year <- function(year, out_dir = "data/merged/panel_stat
       flag_dup_station_day_station = flag_dup_station_day
     )
 
-  # Stations ya trae terminal_id unificado + CVEGEO
   stations <- read_stations() %>%
     transmute(
       station_id,
@@ -55,7 +52,6 @@ build_panel_station_day_year <- function(year, out_dir = "data/merged/panel_stat
       flag_missing_terminal_id
     )
 
-  # Terminal ya trae terminal_id unificado
   terminal <- read_terminal_year(year) %>%
     transmute(
       terminal_id,
@@ -82,20 +78,17 @@ build_panel_station_day_year <- function(year, out_dir = "data/merged/panel_stat
   stations <- stations %>% distinct(station_id, .keep_all = TRUE)
   terminal <- terminal %>% distinct(terminal_id, date, year, .keep_all = TRUE)
 
-  # Merge (terminal_id directo, ya canonizado upstream)
   panel <- retail %>%
     left_join(stations, by = "station_id") %>%
     left_join(terminal, by = c("terminal_id", "date", "year")) %>%
     left_join(intl, by = c("date", "year")) %>%
     arrange(station_id, date)
 
-  # Guard rail para evitar NA masivo silencioso
   coverage <- mean(!is.na(panel$terminal_regular))
   if (coverage < 0.10) {
     stop(sprintf("Terminal join coverage too low: %.2f", coverage))
   }
 
-  # write
   yy_dir <- file.path(out_dir, paste0("year=", year))
   dir.create(yy_dir, showWarnings = FALSE, recursive = TRUE)
 

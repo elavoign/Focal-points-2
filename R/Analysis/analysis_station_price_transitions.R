@@ -1,5 +1,3 @@
-# R/analysis_station_price_transitions.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)

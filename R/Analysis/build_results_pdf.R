@@ -11,10 +11,6 @@ suppressPackageStartupMessages({
   library(tibble)
 })
 
-# --------------------------------------------------------------------------
-# Methodology page 1 — Data construction (no results interpretation)
-# --------------------------------------------------------------------------
-
 .meth_data <- function(n_obs, n_mun, yr_min, yr_max, sample_label) {
   lines <- c(
     "DATA CONSTRUCTION",
@@ -56,7 +52,7 @@ suppressPackageStartupMessages({
     "  - Weekly rows expanded to daily using fecha_inicio / fecha_fin,",
     "    then averaged to calendar month.",
     "  - log_ieps_ratio = log(ieps_prem_cuota / ieps_magna_cuota).",
-    "  - Data available from 2022 onwards only.",
+    "  - Full decree history used (2017 onwards).",
     "  - 7 erroneous entries corrected after systematic audit vs. DOF.",
     "",
     "INCOME — MUNICIPAL INCOME, CAR-OWNING HOUSEHOLDS",
@@ -70,10 +66,6 @@ suppressPackageStartupMessages({
   )
   .text_page(lines, title_line = 1L)
 }
-
-# --------------------------------------------------------------------------
-# Methodology page 2 — Econometric specs (no results interpretation)
-# --------------------------------------------------------------------------
 
 .meth_specs <- function() {
   lines <- c(
@@ -95,13 +87,9 @@ suppressPackageStartupMessages({
     "  log(p_prem/p_reg) instrumented by log_national_wholesale_ratio.",
     "  Full sample 2017-2025.",
     "",
-    "SPEC 2' — IV: WHOLESALE RESTRICTED 2022+  [same FE as Spec 2]",
-    "  Identical to Spec 2 but restricted to 2022 onwards.",
-    "  Directly comparable to Specs 3 and 4 (same sample period).",
-    "",
     "SPEC 3 — IV: IEPS RATIO  [Mun FE + Year FE + Month FE]",
     "  log(p_prem/p_reg) instrumented by log_ieps_ratio.",
-    "  Sample 2022-2025 (decree data available from 2022 only).",
+    "  Full IEPS history (2017 onwards).",
     "",
     "SPEC 4 — IV: BOTH INSTRUMENTS  [Mun FE + Year FE + Month FE]",
     "  Over-identified: 2 instruments for 1 endogenous variable.",
@@ -130,10 +118,6 @@ suppressPackageStartupMessages({
   .text_page(lines, title_line = 1L)
 }
 
-# --------------------------------------------------------------------------
-# Main function
-# --------------------------------------------------------------------------
-
 build_results_pdf <- function(
   base_parquet         = "data/analysis/mun_month_prices/mun_month_prices_with_poverty.parquet",
   ieps_monthly_parquet = "data/processed/ieps/ieps_monthly.parquet",
@@ -141,7 +125,8 @@ build_results_pdf <- function(
   terminal_dir         = "data/processed/terminal",
   bloomberg_parquet    = "data/processed/bloomberg/gasoline_bloomberg.parquet",
   out_path             = "outputs/shaun/results_updated.pdf",
-  restricted_states    = NULL
+  restricted_states    = NULL,
+  precomputed_dir      = NULL
 ) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -158,42 +143,57 @@ build_results_pdf <- function(
     nrow(panel), dplyr::n_distinct(panel$CVEGEO),
     dplyr::n_distinct(panel$year_month)))
 
-  message("=== Running regressions ===")
-  models          <- .run_regressions(panel)
-  national_models <- .run_national_collapse(panel)
-  bloomberg_models <- .run_bloomberg_specs(panel)
+  models_rds   <- if (!is.null(precomputed_dir)) file.path(precomputed_dir, "models.rds")          else NULL
+  nat_rds      <- if (!is.null(precomputed_dir)) file.path(precomputed_dir, "national_models.rds") else NULL
+  bloom_rds    <- if (!is.null(precomputed_dir)) file.path(precomputed_dir, "bloomberg_models.rds") else NULL
+
+  if (!is.null(models_rds) && file.exists(models_rds)) {
+    message("=== Loading pre-computed models ===")
+    models           <- readRDS(models_rds)
+    national_models  <- if (!is.null(nat_rds)   && file.exists(nat_rds))   readRDS(nat_rds)   else NULL
+    bloomberg_models <- if (!is.null(bloom_rds)  && file.exists(bloom_rds)) readRDS(bloom_rds) else list()
+  } else {
+    message("=== Running regressions ===")
+    models           <- .run_regressions(panel)
+    national_models  <- .run_national_collapse(panel)
+    bloomberg_models <- .run_bloomberg_specs(panel)
+  }
 
   message("=== Building spread data ===")
+  retail_spread    <- if (file.exists(base_parquet)) {
+    tryCatch(.read_retail_national_monthly_spread(base_parquet),
+             error = function(e) NULL)
+  } else NULL
   terminal_spread  <- .read_terminal_national_monthly_spread(terminal_dir)
   bloomberg_spread <- if (file.exists(bloomberg_parquet)) {
     tryCatch(.read_bloomberg_monthly_spread(bloomberg_parquet),
              error = function(e) NULL)
   } else NULL
 
+  ieps_daily_parquet <- sub("ieps_monthly\\.parquet$", "ieps_daily.parquet",
+                            ieps_monthly_parquet)
+
   ieps_x_end <- tryCatch({
-    tmp <- arrow::read_parquet(ieps_monthly_parquet)
+    tmp <- arrow::read_parquet(ieps_monthly_parquet, mmap = FALSE)
     lubridate::make_date(max(tmp$year), max(tmp$month[tmp$year == max(tmp$year)]), 1L)
   }, error = function(e) as.Date("2026-04-01"))
 
   message(sprintf("=== Writing PDF: %s ===", out_path))
   grDevices::pdf(out_path, width = 11, height = 8.5, onefile = TRUE)
 
-  # -- Págs 1-2: Metodología --
-  print(.meth_data(nrow(panel), dplyr::n_distinct(panel$CVEGEO),
-                   min(panel$year), max(panel$year), sample_label))
-  print(.meth_specs())
-
-  # -- Pág 3: Tabla principal --
   grid::grid.newpage()
-  grid::grid.draw(.make_regression_table_grob(models))
+  grid::grid.draw(.make_regression_table_grob(models[setdiff(names(models), "(4) IV-Both")]))
 
-  # -- Pág 4: Tabla colapso nacional --
   if (!is.null(national_models) && length(national_models) > 0L) {
     grid::grid.newpage()
     grid::grid.draw(.make_regression_table_grob(national_models))
   }
 
-  # -- Pág 5: Interacción ingreso --
+  if (length(bloomberg_models) > 0L) {
+    grid::grid.newpage()
+    grid::grid.draw(.make_regression_table_grob(bloomberg_models))
+  }
+
   reg5 <- models[["(5) IV×Income"]]
   if (!is.null(reg5)) {
     pg5 <- tryCatch(.plot_income_interaction(reg5, income_data = panel),
@@ -201,53 +201,27 @@ build_results_pdf <- function(
     if (!is.null(pg5)) print(pg5)
   }
 
-  # -- Pág 6: Tabla Bloomberg IV --
-  if (length(bloomberg_models) > 0L) {
-    grid::grid.newpage()
-    grid::grid.draw(.make_regression_table_grob(bloomberg_models))
-  }
-
-  # -- Págs 7-8: Spread diagnóstico PEMEX --
-  print(.spread_scatter(
-    terminal_spread, "mean_regular", "abs_spread",
-    "National avg PEMEX terminal regular price (MXN/L)",
-    "Absolute spread: premium − regular (MXN/L)",
-    "PEMEX terminal: absolute spread vs. regular price level",
-    "Each dot = 1 national monthly average (2017-2025). Dashed: OLS trend."
-  ))
-  print(.spread_scatter(
-    terminal_spread, "mean_regular", "rel_spread",
-    "National avg PEMEX terminal regular price (MXN/L)",
-    "Relative spread: premium / regular",
-    "PEMEX terminal: relative spread vs. regular price level",
-    "If ratio is stable across price levels, the log-ratio specification is appropriate."
-  ))
-
-  # -- Págs 9-10: Spread diagnóstico Bloomberg --
-  if (!is.null(bloomberg_spread)) {
-    print(.spread_scatter(
-      bloomberg_spread, "regular_87_mxn_l", "abs_spread",
-      "Gulf Coast Regular 87 spot price (MXN/L)",
-      "Absolute spread: Premium 93 − Regular 87 (MXN/L)",
-      "Bloomberg Gulf Coast: absolute spread vs. regular price level",
-      "Monthly data, 2017 – Jan 2024.",
-      year_breaks = c(2017, 2019, 2021, 2023)
-    ))
-    print(.spread_scatter(
-      bloomberg_spread, "regular_87_mxn_l", "rel_spread",
-      "Gulf Coast Regular 87 spot price (MXN/L)",
-      "Relative spread: Premium 93 / Regular 87",
-      "Bloomberg Gulf Coast: relative spread vs. regular price level",
-      "Key diagnostic: does the ratio vary with the price level?",
-      year_breaks = c(2017, 2019, 2021, 2023)
-    ))
-  }
-
-  # -- Pág 9/11: IEPS cuotas --
-  ieps_graph <- tryCatch(.plot_ieps_rates(ieps_monthly_parquet), error = function(e) NULL)
+  ieps_graph <- tryCatch(.plot_ieps_rates(ieps_daily_parquet), error = function(e) NULL)
   if (!is.null(ieps_graph)) print(ieps_graph)
 
-  # -- Pág 10/12: Bloomberg precios --
+  ieps_spread_graph <- tryCatch(.plot_ieps_spread(ieps_daily_parquet), error = function(e) NULL)
+  if (!is.null(ieps_spread_graph)) print(ieps_spread_graph)
+
+  price_ratio_graph <- tryCatch(
+    .plot_national_price_ratio(base_parquet), error = function(e) NULL
+  )
+  if (!is.null(price_ratio_graph)) print(price_ratio_graph)
+
+  vol_graph <- tryCatch(
+    .plot_national_volumes(base_parquet), error = function(e) NULL
+  )
+  if (!is.null(vol_graph)) print(vol_graph)
+
+  combined_ratios_graph <- tryCatch(
+    .plot_combined_ratios(base_parquet), error = function(e) NULL
+  )
+  if (!is.null(combined_ratios_graph)) print(combined_ratios_graph)
+
   bloom_graph <- tryCatch(
     .plot_bloomberg_prices(bloomberg_parquet, x_end = ieps_x_end),
     error = function(e) NULL

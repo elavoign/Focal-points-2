@@ -1,5 +1,3 @@
-# R/Merged_to_Analysis/compute_spreads_station_day.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)

@@ -1,5 +1,3 @@
-# targets/raw_to_processed_int.R
-
 suppressPackageStartupMessages({
   library(targets)
 })
@@ -22,7 +20,6 @@ raw_to_processed_int <- function() {
       format = "file"
     ),
 
-    # Construye la serie diaria ya completa (con LOCF en regular/diesel) y convertida
     tar_target(
       international_daily,
       build_international_daily(
@@ -32,7 +29,6 @@ raw_to_processed_int <- function() {
       )
     ),
 
-    # Escribe 1 parquet por año y devuelve tibble(year, path)
     tar_target(
       international_parquet_paths,
       write_international_parquets_by_year(

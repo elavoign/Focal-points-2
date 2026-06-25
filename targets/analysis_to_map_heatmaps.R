@@ -16,9 +16,6 @@ analysis_to_map_heatmaps <- function() {
       format = "file"
     ),
 
-    # -----------------------------
-    # 1 mes
-    # -----------------------------
     tar_target(
       cvegeo_spread_maps_png_1m,
       {
@@ -38,9 +35,6 @@ analysis_to_map_heatmaps <- function() {
       iteration = "list"
     ),
 
-    # -----------------------------
-    # 3 meses
-    # -----------------------------
     tar_target(
       cvegeo_spread_maps_png_3m,
       {
@@ -60,9 +54,6 @@ analysis_to_map_heatmaps <- function() {
       iteration = "list"
     ),
 
-    # -----------------------------
-    # 6 meses
-    # -----------------------------
     tar_target(
       cvegeo_spread_maps_png_6m,
       {
@@ -85,6 +76,11 @@ analysis_to_map_heatmaps <- function() {
     tar_target(
       heatmaps_outputs_files,
       {
+
+        force(cvegeo_spread_maps_png_1m)
+        force(cvegeo_spread_maps_png_3m)
+        force(cvegeo_spread_maps_png_6m)
+
         if (!dir.exists("outputs/maps")) {
           stop("No existe la carpeta outputs/maps (desde el working directory del pipeline).")
         }

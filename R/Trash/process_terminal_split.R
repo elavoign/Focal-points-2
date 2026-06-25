@@ -1,5 +1,3 @@
-# R/Raw_to_Processed/process_terminal_split.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(stringr)
@@ -8,9 +6,6 @@ suppressPackageStartupMessages({
   library(stringi)
 })
 
-# =========================
-# Normalizador consistente (si lo usas para otras cosas)
-# =========================
 normalize_text <- function(x) {
   if (length(x) == 0) return(character(0))
 

@@ -1,5 +1,3 @@
-# R/Raw_to_Processed/process_terminal_year.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)

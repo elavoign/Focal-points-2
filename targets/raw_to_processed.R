@@ -1,14 +1,8 @@
-# targets/raw_to_processed.R
-
 suppressPackageStartupMessages({
   library(targets)
 })
 
 raw_to_processed <- function() list(
-
-  # ========================
-  # SCRIPTS
-  # ========================
 
   tar_target(
     script_terminal_id,
@@ -40,10 +34,6 @@ raw_to_processed <- function() list(
     format = "file"
   ),
 
-  # ========================
-  # INPUTS RAW
-  # ========================
-
   tar_target(
     terminal_csv,
     "data/raw_public/terminal_prices/Terminal.csv",
@@ -55,10 +45,6 @@ raw_to_processed <- function() list(
     "data/raw_private/stations/Stations.rda",
     format = "file"
   ),
-
-  # ========================
-  # RETAIL (2017–2025)
-  # ========================
 
   tar_target(
     retail_2017_parquet,
@@ -213,10 +199,6 @@ raw_to_processed <- function() list(
     packages = c("readr", "dplyr", "stringr", "arrow")
   ),
 
-  # ========================
-  # TERMINAL (2017–2025)
-  # ========================
-
   tar_target(
     terminal_parquet_paths,
     {
@@ -232,10 +214,6 @@ raw_to_processed <- function() list(
     iteration = "list",
     packages = c("readr", "dplyr", "arrow")
   ),
-
-  # ========================
-  # STATIONS
-  # ========================
 
   tar_target(
     stations_parquet,

@@ -1,6 +1,3 @@
-# R/Processed_to_Merged/build_balanced_panel.R
-# See README_INTERNAL.md §5 Capa 3 for LOCF design and carry-forward cap.
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)
@@ -16,9 +13,8 @@ build_balanced_panel_year <- function(year,
                                       out_dir = "data/merged/balanced_panel") {
 
   in_path <- file.path(in_dir, paste0("year=", year), "panel_station_day.parquet")
-  panel   <- arrow::read_parquet(in_path)
+  panel   <- arrow::read_parquet(in_path, mmap = FALSE)
 
-  # All calendar days in the year
   year_dates <- seq.Date(
     from = as.Date(sprintf("%d-01-01", year)),
     to   = as.Date(sprintf("%d-12-31", year)),
@@ -34,7 +30,6 @@ build_balanced_panel_year <- function(year,
     year, n_stations, n_days, expected_rows
   ))
 
-  # --- Station-level metadata (time-invariant per station) ---
   station_meta <- panel %>%
     select(
       station_id, numero_permiso, terminal_id,
@@ -43,8 +38,6 @@ build_balanced_panel_year <- function(year,
     ) %>%
     distinct(station_id, .keep_all = TRUE)
 
-  # --- Actual price observations from retail data ---
-  # Mark each row as observed (is_obs = TRUE) so we can distinguish grid rows later
   obs_data <- panel %>%
     transmute(
       station_id,
@@ -62,7 +55,6 @@ build_balanced_panel_year <- function(year,
       is_obs = TRUE
     )
 
-  # --- Build the full balanced grid ---
   grid <- tidyr::expand_grid(station_id = all_stations, date = year_dates)
 
   balanced <- grid %>%
@@ -70,13 +62,11 @@ build_balanced_panel_year <- function(year,
     left_join(obs_data,     by = c("station_id", "date")) %>%
     mutate(
       is_obs = coalesce(is_obs, FALSE),
-      # A "valid report" requires at least one non-NA station price.
-      # This is what resets the staleness clock.
+
       has_any_price = is_obs & (!is.na(station_regular) | !is.na(station_premium))
     ) %>%
-    arrange(station_id, date)   # CRITICAL: fill() respects row order
+    arrange(station_id, date)
 
-  # --- Carry-forward prices and track last-price date ---
   balanced <- balanced %>%
     group_by(station_id) %>%
     mutate(
@@ -98,7 +88,7 @@ build_balanced_panel_year <- function(year,
                             days_since_last_report > BALANCED_PANEL_MAX_CARRY_DAYS,
       year = as.integer(year)
     ) %>%
-    # Apply 60-day cap: nullify stale carry-forward prices
+
     mutate(
       station_regular = if_else(flag_stale_over_60d, NA_real_, station_regular),
       station_premium = if_else(flag_stale_over_60d, NA_real_, station_premium),
@@ -106,11 +96,6 @@ build_balanced_panel_year <- function(year,
     ) %>%
     ungroup()
 
-  # ==========================================================================
-  # VALIDATION CHECKS
-  # ==========================================================================
-
-  # (1) Balanced: total row count
   if (nrow(balanced) != expected_rows) {
     stop(sprintf(
       "[balanced_panel %d] BALANCE CHECK FAILED: expected %d rows, got %d",
@@ -118,7 +103,6 @@ build_balanced_panel_year <- function(year,
     ))
   }
 
-  # (2) Balanced: every station has exactly n_days rows
   rows_bad <- balanced %>%
     count(station_id) %>%
     filter(n != n_days)
@@ -129,7 +113,6 @@ build_balanced_panel_year <- function(year,
     ))
   }
 
-  # (3) 60-day rule: no stale row should have a non-NA price
   stale_with_price <- balanced %>%
     filter(flag_stale_over_60d) %>%
     summarise(n = sum(!is.na(station_regular) | !is.na(station_premium))) %>%
@@ -141,9 +124,8 @@ build_balanced_panel_year <- function(year,
     ))
   }
 
-  # (4) Summary stats
-  n_original <- sum(!balanced$is_obs)   # wait, is_obs=FALSE means it was added by grid
-  # Actually: is_obs TRUE = was in retail data; FALSE = synthetic row added by grid
+  n_original <- sum(!balanced$is_obs)
+
   n_synthetic  <- sum(!balanced$is_obs)
   n_carry      <- sum(balanced$flag_carry_forward)
   n_stale      <- sum(balanced$flag_stale_over_60d)
@@ -171,9 +153,6 @@ build_balanced_panel_year <- function(year,
     year, pct_na_reg, pct_na_prem
   ))
 
-  # ==========================================================================
-  # WRITE
-  # ==========================================================================
   yy_dir   <- file.path(out_dir, paste0("year=", year))
   dir.create(yy_dir, showWarnings = FALSE, recursive = TRUE)
   out_path <- file.path(yy_dir, "balanced_panel.parquet")

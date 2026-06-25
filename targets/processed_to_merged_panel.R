@@ -1,5 +1,3 @@
-# targets/processed_to_merged_panel.R
-
 suppressPackageStartupMessages({
   library(targets)
 })
@@ -9,7 +7,7 @@ processed_to_merged_panel <- function() {
     tar_target(
       panel_station_day_parquets,
       {
-        # --- Dependencias upstream (raw_to_processed) ---
+
         c(
           retail_2017_parquet, retail_2018_parquet, retail_2019_parquet,
           retail_2020_parquet, retail_2021_parquet, retail_2022_parquet,

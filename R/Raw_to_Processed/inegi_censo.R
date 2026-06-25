@@ -1,5 +1,3 @@
-# R/Raw_to_Processed/inegi_censo.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(readxl)

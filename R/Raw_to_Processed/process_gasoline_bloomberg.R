@@ -5,9 +5,6 @@ suppressPackageStartupMessages({
   library(lubridate)
 })
 
-# Bloomberg Gulf Coast spot prices (Regular 87, Premium 93) — discontinued 2024-01-31.
-# Input: USc/gal → output: MXN/L using monthly FX from international processed parquet.
-
 process_gasoline_bloomberg <- function(
   xlsx_path   = "data/raw_public/GASOLINE.xlsx",
   intl_dir    = "data/processed/international",
@@ -15,7 +12,6 @@ process_gasoline_bloomberg <- function(
 ) {
   dir.create(dirname(out_parquet), recursive = TRUE, showWarnings = FALSE)
 
-  # Monthly average FX (MXN per USD) from existing international dataset
   intl_files <- list.files(intl_dir, pattern = "\\.parquet$",
                            full.names = TRUE, recursive = TRUE)
   fx_monthly <- arrow::open_dataset(intl_files) |>
@@ -57,7 +53,6 @@ process_gasoline_bloomberg <- function(
   premium_93 <- parse_sheet("MOIGC93P") |>
     dplyr::rename(premium_93_usc_gal = price_usc_gal)
 
-  # 1 USc/gal → MXN/l: × 0.01 (USc→USD) ÷ 3.78541 (gal→l) × fx (USD→MXN)
   out <- dplyr::full_join(regular_87, premium_93, by = c("year", "month")) |>
     dplyr::left_join(fx_monthly, by = c("year", "month")) |>
     dplyr::mutate(

@@ -13,7 +13,6 @@ usd_per_gallon_to_mxn_per_liter <- function(price_usd_gal, fx_mxn_usd) {
   (price_usd_gal * fx_mxn_usd) / GALLON_TO_LITER
 }
 
-# ---- Lectores (igual que tú) ----
 read_regular_usd_gal <- function(path) {
   raw <- read_excel(
     path,
@@ -60,10 +59,8 @@ read_fx_mxn_usd <- function(path) {
     arrange(date)
 }
 
-# ---- NUEVO: expandir a diario + LOCF ----
 expand_daily_locf <- function(df, value_col) {
-  # df: columnas date + value_col
-  # value_col: string, ej. "regular_usd_gal"
+
   df %>%
     arrange(date) %>%
     complete(date = seq(min(date), max(date), by = "day")) %>%
@@ -78,8 +75,6 @@ build_international_daily <- function(path_regular, path_diesel, path_fx) {
     expand_daily_locf("diesel_usd_gal")
 
   fx   <- read_fx_mxn_usd(path_fx)
-  # Si FX también tuviera huecos y quisieras LOCF:
-  # fx <- fx %>% expand_daily_locf("fx_mxn_usd")
 
   reg %>%
     inner_join(dies, by = "date") %>%

@@ -1,4 +1,3 @@
-# targets/ieps_range.R
 suppressPackageStartupMessages({
   library(targets)
 })
@@ -25,7 +24,7 @@ ieps_range_targets <- function() {
         out_dir = ieps_range_out_dir,
         combined_csv = ieps_range_combined_csv_path,
         candidates_csv = ieps_candidates_csv_path,
-        chunk_size = 300,     # ponlo bajo para test
+        chunk_size = 300,
         max_sleep = 37,
         resume = TRUE
       ),

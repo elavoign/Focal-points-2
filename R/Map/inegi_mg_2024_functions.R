@@ -1,13 +1,9 @@
-# R/Map/inegi_mg_2024_functions.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(stringr)
   library(sf)
   library(arrow)
 })
-
-# ---------- Paths & unzip ----------
 
 inegi_mg_2024_zip_path <- function() {
   "data/raw_public/inegi_mg_2024/794551163061_s.zip"
@@ -27,7 +23,6 @@ ensure_unzipped_inegi_mg_2024 <- function(zip_path,
   done_file <- file.path(unzip_dir, ".unzipped_done")
   if (file.exists(done_file)) return(done_file)
 
-  # helper: unzip silencioso usando binario del sistema
   unzip_quiet <- function(zipfile, exdir) {
     dir.create(exdir, recursive = TRUE, showWarnings = FALSE)
     status <- suppressWarnings(
@@ -43,17 +38,14 @@ ensure_unzipped_inegi_mg_2024 <- function(zip_path,
     TRUE
   }
 
-  # 1) unzip principal (deja zips internos)
   unzip_quiet(zip_path, unzip_dir)
 
-  # 2) extrae SOLO el zip integrado mg_2025_integrado.zip (si existe)
   integ_zip <- list.files(unzip_dir, pattern = "mg_2025_integrado\\.zip$", full.names = TRUE)
   if (length(integ_zip) != 1) stop("Could not find unique mg_2025_integrado.zip inside unzip_dir.")
 
   integ_dir <- file.path(unzip_dir, "mg_2025_integrado")
   unzip_quiet(integ_zip[1], integ_dir)
 
-  # 3) mueve SOLO 00mun.* a una carpeta final y borra lo demás (para no “tener cosas finas”)
   src_dir <- file.path(integ_dir, "conjunto_de_datos")
   need <- c("00mun.shp","00mun.shx","00mun.dbf","00mun.prj","00mun.cpg")
   src_files <- file.path(src_dir, need)
@@ -63,7 +55,6 @@ ensure_unzipped_inegi_mg_2024 <- function(zip_path,
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   file.copy(src_files, out_dir, overwrite = TRUE)
 
-  # opcional: borra lo demás para que no quede “demadre”
   unlink(integ_dir, recursive = TRUE, force = TRUE)
   inner_zips <- list.files(unzip_dir, pattern = "\\.zip$", full.names = TRUE)
   unlink(inner_zips, force = TRUE)
@@ -72,30 +63,26 @@ ensure_unzipped_inegi_mg_2024 <- function(zip_path,
   done_file
 }
 
-# ---------- Shapefile discovery ----------
-
 list_shapefiles_recursive <- function(root_dir) {
   list.files(root_dir, pattern = "\\.shp$", recursive = TRUE, full.names = TRUE)
 }
 
 score_municipios_shp <- function(shp_path) {
-  # Bonus por nombre de archivo (INEGI usa 00mun/##mun)
+
   base <- tolower(basename(shp_path))
   s <- 0
-  if (grepl("mun\\.shp$", base)) s <- s + 25  # fuerte: queremos municipios
+  if (grepl("mun\\.shp$", base)) s <- s + 25
 
   x <- tryCatch(sf::st_read(shp_path, quiet = TRUE), error = function(e) NULL)
   if (is.null(x)) return(-Inf)
 
   nms <- names(x)
 
-  # Campos típicos de municipios
   if ("CVE_ENT" %in% nms) s <- s + 3
   if ("CVE_MUN" %in% nms) s <- s + 8
   if ("NOM_ENT" %in% nms) s <- s + 2
   if ("NOM_MUN" %in% nms) s <- s + 6
 
-  # CVEGEO presente suma solo si parece municipal
   key <- NULL
   if ("CVEGEO" %in% nms) key <- "CVEGEO"
 
@@ -114,7 +101,6 @@ score_municipios_shp <- function(shp_path) {
     }
   }
 
-  # Penaliza capas que huelen a solo entidad
   if ("CVE_ENT" %in% nms && !("CVE_MUN" %in% nms) && !("NOM_MUN" %in% nms)) s <- s - 10
 
   s
@@ -130,7 +116,6 @@ score_estados_shp <- function(shp_path) {
   if ("CVE_ENT" %in% nms) s <- s + 5
   if ("NOM_ENT" %in% nms) s <- s + 4
 
-  # Penalize municipality-looking layers
   if ("CVE_MUN" %in% nms) s <- s - 10
   if ("NOM_MUN" %in% nms) s <- s - 10
   if ("CVEGEO" %in% nms) s <- s - 2
@@ -146,7 +131,6 @@ detect_best_shp <- function(shp_paths, scorer) {
   best
 }
 
-# IMPORTANT: determinista, prioriza mun.shp y en particular 00mun.shp
 detect_municipios_shp <- function(unzip_dir = inegi_mg_2024_unzip_dir()) {
   p <- file.path(unzip_dir, "ONLY_MUNICIPIOS_00mun", "00mun.shp")
   if (!file.exists(p)) stop("Expected municipios shapefile not found: ", p)
@@ -158,8 +142,6 @@ detect_estados_shp <- function(unzip_dir = inegi_mg_2024_unzip_dir()) {
   detect_best_shp(shp_paths, score_estados_shp)
 }
 
-# ---------- Key standardization ----------
-
 pad_left <- function(x, width) {
   x <- as.character(x)
   stringr::str_pad(x, width = width, side = "left", pad = "0")
@@ -169,7 +151,7 @@ standardize_cvegeo_mun <- function(df_sf) {
   nms <- names(df_sf)
 
   if (!("CVEGEO" %in% names(df_sf))) {
-    # Construct from CVE_ENT + CVE_MUN
+
     if (!all(c("CVE_ENT", "CVE_MUN") %in% names(df_sf))) {
       stop("Municipios layer missing CVEGEO and also missing CVE_ENT/CVE_MUN to construct it.")
     }
@@ -180,17 +162,15 @@ standardize_cvegeo_mun <- function(df_sf) {
         CVEGEO  = paste0(CVE_ENT, CVE_MUN)
       )
   } else {
-    # Si CVEGEO viene largo (ej. 13 con letras), recorta a municipio
+
     df_sf <- df_sf %>%
       mutate(CVEGEO = substr(as.character(CVEGEO), 1, 5)) %>%
       mutate(CVEGEO = pad_left(CVEGEO, 5))
   }
 
-  # Deriva CVE_ENT/CVE_MUN si faltan
   if (!("CVE_ENT" %in% names(df_sf))) df_sf <- df_sf %>% mutate(CVE_ENT = substr(CVEGEO, 1, 2))
   if (!("CVE_MUN" %in% names(df_sf))) df_sf <- df_sf %>% mutate(CVE_MUN = substr(CVEGEO, 3, 5))
 
-  # VALIDACIÓN FUERTE: debe ser 5 dígitos numéricos
   bad_share <- mean(!grepl("^[0-9]{5}$", df_sf$CVEGEO))
   if (is.na(bad_share)) bad_share <- 1
   if (bad_share > 0) {
@@ -204,8 +184,6 @@ standardize_keys_state <- function(df_sf) {
   if (!("CVE_ENT" %in% names(df_sf))) stop("Estados layer missing CVE_ENT.")
   df_sf %>% mutate(CVE_ENT = pad_left(CVE_ENT, 2))
 }
-
-# ---------- Geometry helpers ----------
 
 to_wgs84 <- function(x) {
   if (is.na(sf::st_crs(x))) {
@@ -229,8 +207,6 @@ add_centroids <- function(sf_obj) {
     )
 }
 
-# ---------- Writers ----------
-
 write_geoparquet_sf <- function(sf_obj, out_path) {
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
 
@@ -240,8 +216,6 @@ write_geoparquet_sf <- function(sf_obj, out_path) {
   sf::st_write(sf_obj, out_path, driver = "GPKG", quiet = TRUE, append = FALSE)
   out_path
 }
-
-# ---------- Build outputs ----------
 
 build_municipios_geo_mg2024 <- function(unzip_done_file,
                                        unzip_dir = inegi_mg_2024_unzip_dir(),

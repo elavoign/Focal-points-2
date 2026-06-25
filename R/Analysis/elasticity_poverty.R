@@ -1,63 +1,3 @@
-# R/Analysis/elasticity_poverty.R
-#
-# Tasks C and D: municipality-specific price elasticities of premium share
-# and their relationship with municipal poverty (CONEVAL 2020).
-#
-# ==========================================================================
-# MODEL — Form 1 (Task C)
-# ==========================================================================
-# premium_share_mt = alpha_m + gamma_t + beta_m * log(price_ratio_mt) + e_mt
-#
-# where:
-#   alpha_m        = municipality fixed effect (intercept)
-#   gamma_t        = year-month fixed effect (common time shock)
-#   beta_m         = municipality-specific price responsiveness
-#   price_ratio_mt = premium_price_monthly / regular_price_monthly
-#
-# Estimation — two-step Frisch-Waugh-Lovell:
-#   Step 1: partial out the global year-month FE from both premium_share and
-#           log(price_ratio) by subtracting time-period means across all
-#           municipalities. For the near-balanced panel here (most municipalities
-#           observe ~100 of 104 possible year-months) this is numerically
-#           equivalent to the iterative FWL projector.
-#   Step 2: for each municipality, run OLS of demeaned share on demeaned
-#           log(ratio). The municipality intercept alpha_m is absorbed by
-#           the OLS constant in step 2.
-#
-# ==========================================================================
-# MODEL — Form 2 (Task D)
-# ==========================================================================
-# Semiparametric varying coefficient, estimated in two stages:
-#   Stage 1: beta_m and its standard error se_m from Form 1 above.
-#   Stage 2: beta_m = g(poverty_final_m) + e_m
-#            where g(.) is a penalised thin-plate regression spline via
-#            mgcv::gam(), with observations weighted by 1 / se_m^2
-#            to account for first-stage estimation uncertainty.
-#
-# This avoids fitting 1,352 municipality dummies inside a GAM (which would
-# be both slow and collinear with the poverty argument), while preserving
-# the inferential goal: does g(poverty) show a U-shape, monotone decline,
-# or other pattern?
-#
-# ==========================================================================
-# OUTPUTS
-# ==========================================================================
-# data/analysis/elasticity/mun_elasticities.parquet
-#   municipality-level table: beta_m, se_m, poverty_final, …
-#
-# outputs/shaun/elasticity/elasticity_poverty_bins.{parquet,csv}
-#   summary table: mean/median/p25/p75/count of beta_m by poverty bin
-#
-# outputs/shaun/elasticity/form1_scatter.pdf
-# outputs/shaun/elasticity/form1_bins.pdf
-#   Form 1 publication graphs
-#
-# outputs/shaun/elasticity/form2_gam.pdf
-#   Form 2 GAM smooth curve with 95 % CI
-#
-# outputs/shaun/elasticity/elasticity_summary.xlsx
-#   Excel workbook: municipality table + bin table + interpretation
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(arrow)
@@ -70,12 +10,8 @@ suppressPackageStartupMessages({
   library(stringr)
 })
 
-# --------------------------------------------------------------------------
-# 1. Prepare modelling dataset
-# --------------------------------------------------------------------------
-
 .prep_elasticity_data <- function(poverty_panel_parquet) {
-  df <- arrow::read_parquet(poverty_panel_parquet) |>
+  df <- arrow::read_parquet(poverty_panel_parquet, mmap = FALSE) |>
     dplyr::filter(
       !is.na(premium_share),
       !is.na(premium_to_regular_price_ratio),
@@ -96,19 +32,9 @@ suppressPackageStartupMessages({
   df
 }
 
-# --------------------------------------------------------------------------
-# 2. Task C — estimate municipality-specific elasticities (two-step FWL)
-# --------------------------------------------------------------------------
-
 .estimate_mun_elasticities <- function(df, min_obs = 12L,
                                        time_fe_var = "year") {
-  # ------------------------------------------------------------------
-  # Step 1: partial out global time FE by subtracting time-period means.
-  # time_fe_var = "year"       absorbs annual shocks, keeps seasonal and
-  #                            month-to-month price variation for beta_m.
-  # time_fe_var = "year_month" absorbs all common monthly shocks (more
-  #                            conservative; uses only idiosyncratic variation).
-  # ------------------------------------------------------------------
+
   time_means <- df |>
     dplyr::group_by(.data[[time_fe_var]]) |>
     dplyr::summarise(
@@ -129,16 +55,13 @@ suppressPackageStartupMessages({
     nrow(time_means), time_fe_var
   ))
 
-  # ------------------------------------------------------------------
-  # Step 2: within-municipality OLS on demeaned data
-  # ------------------------------------------------------------------
   mun_betas <- df |>
     dplyr::group_by(CVEGEO) |>
     dplyr::filter(dplyr::n() >= min_obs) |>
     dplyr::group_modify(~{
       y <- .x$y_dm
       x <- .x$x_dm
-      # Need variation in x to identify beta
+
       if (stats::var(x, na.rm = TRUE) < 1e-12) return(tibble::tibble())
       fit <- stats::lm(y ~ x)
       sm  <- summary(fit)
@@ -160,7 +83,6 @@ suppressPackageStartupMessages({
     nrow(mun_betas)
   ))
 
-  # Attach municipality metadata (poverty + names)
   mun_meta <- df |>
     dplyr::distinct(CVEGEO, CVE_ENT, NOM_ENT, NOM_MUN,
                     poverty_final, poverty_sex, poverty_age, poverty_geo,
@@ -171,10 +93,6 @@ suppressPackageStartupMessages({
 
   mun_betas |> dplyr::left_join(mun_meta, by = "CVEGEO")
 }
-
-# --------------------------------------------------------------------------
-# 3. Task C — poverty-bin summary table
-# --------------------------------------------------------------------------
 
 .build_poverty_bins <- function(mun_betas, bin_width = 5) {
   pov_range  <- range(mun_betas$poverty_final, na.rm = TRUE)
@@ -215,10 +133,6 @@ suppressPackageStartupMessages({
   )
 }
 
-# --------------------------------------------------------------------------
-# 4. Task D — semiparametric GAM (two-stage)
-# --------------------------------------------------------------------------
-
 .estimate_gam <- function(mun_betas, k = 10) {
   df_gam <- mun_betas |>
     dplyr::filter(
@@ -242,7 +156,6 @@ suppressPackageStartupMessages({
     100 * summary(fit)$dev.expl
   ))
 
-  # Prediction grid over poverty range
   pov_seq <- seq(
     min(df_gam$poverty_final, na.rm = TRUE),
     max(df_gam$poverty_final, na.rm = TRUE),
@@ -263,14 +176,10 @@ suppressPackageStartupMessages({
   list(model = fit, pred_df = pred_df, data = df_gam)
 }
 
-# --------------------------------------------------------------------------
-# 5. Graphs — Form 1
-# --------------------------------------------------------------------------
-
 .plot_form1_scatter <- function(mun_betas, bins_list) {
   df_plot <- mun_betas |>
     dplyr::filter(!is.na(poverty_final), !is.na(beta_m), is.finite(beta_m)) |>
-    # Winsorise for display only (±4 SE from median)
+
     dplyr::mutate(
       beta_m_clip = pmin(pmax(beta_m,
         quantile(beta_m, 0.01, na.rm = TRUE)),
@@ -278,7 +187,6 @@ suppressPackageStartupMessages({
       )
     )
 
-  # LOESS reference line
   gg <- ggplot2::ggplot(df_plot,
     ggplot2::aes(x = poverty_final, y = beta_m_clip)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
@@ -327,12 +235,12 @@ suppressPackageStartupMessages({
     ggplot2::aes(x = pov_mid, y = mean_beta)) +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
                         colour = "grey60", linewidth = 0.4) +
-    # IQR ribbon
+
     ggplot2::geom_ribbon(
       ggplot2::aes(ymin = p25_beta, ymax = p75_beta),
       fill = "#abd9e9", alpha = 0.45
     ) +
-    # 95% CI ribbon for the mean
+
     ggplot2::geom_ribbon(
       ggplot2::aes(ymin = ci_lo, ymax = ci_hi),
       fill = "#2c7bb6", alpha = 0.35
@@ -373,10 +281,6 @@ suppressPackageStartupMessages({
   gg
 }
 
-# --------------------------------------------------------------------------
-# 6. Graphs — Form 2 (GAM smooth)
-# --------------------------------------------------------------------------
-
 .plot_form2_gam <- function(gam_list, mun_betas) {
   pred_df  <- gam_list$pred_df
   df_pts   <- gam_list$data |>
@@ -394,26 +298,26 @@ suppressPackageStartupMessages({
   gg <- ggplot2::ggplot() +
     ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
                         colour = "grey60", linewidth = 0.4) +
-    # Municipality points (weight-sized, semi-transparent)
+
     ggplot2::geom_point(
       data = df_pts,
       ggplot2::aes(x = poverty_final, y = beta_clip,
                    size = 1 / se_m),
       alpha = 0.2, colour = "#2c7bb6"
     ) +
-    # 95 % CI ribbon
+
     ggplot2::geom_ribbon(
       data = pred_df,
       ggplot2::aes(x = poverty_final, ymin = ci_lo, ymax = ci_hi),
       fill = "#d7191c", alpha = 0.18
     ) +
-    # Smooth curve
+
     ggplot2::geom_line(
       data = pred_df,
       ggplot2::aes(x = poverty_final, y = fit),
       colour = "#d7191c", linewidth = 1.1
     ) +
-    # Poverty rug
+
     ggplot2::geom_rug(
       data = df_pts,
       ggplot2::aes(x = poverty_final),
@@ -451,10 +355,6 @@ suppressPackageStartupMessages({
 
   gg
 }
-
-# --------------------------------------------------------------------------
-# 7. Methodology cover page (first page of PDF)
-# --------------------------------------------------------------------------
 
 .make_methodology_page <- function(n_mun, n_obs, year_range,
                                    time_fe_var, winsor_pct, bin_width) {
@@ -538,17 +438,12 @@ suppressPackageStartupMessages({
     )
 }
 
-# --------------------------------------------------------------------------
-# 8. Excel workbook
-# --------------------------------------------------------------------------
-
 .write_elasticity_excel <- function(mun_betas, bins_list, bin_width,
                                     time_fe_var, winsor_pct, out_xlsx) {
   dir.create(dirname(out_xlsx), recursive = TRUE, showWarnings = FALSE)
 
   wb <- openxlsx::createWorkbook()
 
-  # --- Sheet 1: Methodology (first so it opens by default) ---
   method_df <- data.frame(
     Item = c(
       "QUESTION",
@@ -609,7 +504,6 @@ suppressPackageStartupMessages({
   openxlsx::addWorksheet(wb, "Metodologia")
   openxlsx::writeData(wb, "Metodologia", x = method_df, startRow = 1)
 
-  # Style: bold the section headers
   header_rows <- which(method_df$Description == "" |
     method_df$Item %in% c("QUESTION","MODEL","ESTIMATOR","ROBUSTNESS",
                            "DATA SOURCES","HOW TO READ"))
@@ -624,7 +518,6 @@ suppressPackageStartupMessages({
     style = openxlsx::createStyle(wrapText = TRUE),
     rows  = 2:(nrow(method_df) + 1L), cols = 2, gridExpand = TRUE)
 
-  # --- Sheet 2: Municipality elasticities ---
   sheet2 <- mun_betas |>
     dplyr::filter(!is.na(beta_m)) |>
     dplyr::arrange(poverty_final) |>
@@ -647,7 +540,6 @@ suppressPackageStartupMessages({
     rows  = seq_len(nrow(sheet2)) + 1L,
     cols  = beta_cols, gridExpand = TRUE)
 
-  # --- Sheet 3: Bin summary ---
   bin_sheet_name <- sprintf("Bins_%gpp", bin_width)
   openxlsx::addWorksheet(wb, bin_sheet_name)
   openxlsx::writeDataTable(wb, bin_sheet_name,
@@ -659,10 +551,6 @@ suppressPackageStartupMessages({
   message(sprintf("Excel written: %s", out_xlsx))
   out_xlsx
 }
-
-# --------------------------------------------------------------------------
-# 8. Main wrapper
-# --------------------------------------------------------------------------
 
 run_elasticity_poverty_analysis <- function(
   poverty_panel_parquet = "data/analysis/mun_month_prices/mun_month_prices_with_poverty.parquet",
@@ -676,11 +564,9 @@ run_elasticity_poverty_analysis <- function(
   dir.create(out_dir,                recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(betas_parquet), recursive = TRUE, showWarnings = FALSE)
 
-  # ---- 1. Load data ----
   message("=== Step 1: load data ===")
   df <- .prep_elasticity_data(poverty_panel_parquet)
 
-  # ---- 2. Estimate municipality elasticities (year FE, two-step FWL) ----
   message(sprintf("=== Step 2: municipality elasticities (time_fe_var = '%s') ===",
                   time_fe_var))
   mun_betas <- .estimate_mun_elasticities(df, min_obs = min_obs,
@@ -702,7 +588,6 @@ run_elasticity_poverty_analysis <- function(
     100 * mean(abs(mun_betas_pov$t_stat) > 2, na.rm = TRUE)
   ))
 
-  # ---- 3. Winsorise beta_m (robustness suggestion 1) ----
   lo <- stats::quantile(mun_betas_pov$beta_m, winsor_pct,      na.rm = TRUE)
   hi <- stats::quantile(mun_betas_pov$beta_m, 1 - winsor_pct,  na.rm = TRUE)
   mun_betas_pov <- mun_betas_pov |>
@@ -715,9 +600,8 @@ run_elasticity_poverty_analysis <- function(
     100 * winsor_pct, 100 * (1 - winsor_pct), lo, hi
   ))
 
-  # ---- 4. Poverty bins on winsorised betas ----
   message(sprintf("=== Step 3: poverty-bin summary (%g pp bins) ===", bin_width))
-  # Swap beta_m for beta_m_w so bins use winsorised values
+
   mun_betas_pov_w <- mun_betas_pov |>
     dplyr::mutate(beta_m = beta_m_w)
   bins_list <- .build_poverty_bins(mun_betas_pov_w, bin_width = bin_width)
@@ -728,7 +612,6 @@ run_elasticity_poverty_analysis <- function(
     max(bins_list$summary_tbl$n)
   ))
 
-  # ---- 5. Graphs ----
   message("=== Step 4: generate graphs ===")
 
   gg_cover   <- .make_methodology_page(
@@ -742,7 +625,6 @@ run_elasticity_poverty_analysis <- function(
   gg_scatter <- .plot_form1_scatter(mun_betas_pov, bins_list)
   gg_bins    <- .plot_form1_bins(bins_list, bin_width = bin_width)
 
-  # --- Single combined PDF: cover + scatter + bins ---
   combined_path <- file.path(out_dir, "elasticity_analysis.pdf")
   grDevices::pdf(combined_path, width = 9, height = 6, onefile = TRUE)
   print(gg_cover)
@@ -750,7 +632,6 @@ run_elasticity_poverty_analysis <- function(
   print(gg_bins)
   grDevices::dev.off()
 
-  # --- Also save individual PDFs for easy sharing ---
   scatter_path <- file.path(out_dir, "form1_scatter.pdf")
   bins_path    <- file.path(out_dir, "form1_bins.pdf")
   ggplot2::ggsave(scatter_path, plot = gg_scatter, width = 9, height = 6, dpi = 150)
@@ -758,7 +639,6 @@ run_elasticity_poverty_analysis <- function(
   message(sprintf("  Combined PDF: %s", combined_path))
   message(sprintf("  Individual:   %s, %s", scatter_path, bins_path))
 
-  # ---- 6. Parquet outputs ----
   arrow::write_parquet(mun_betas, betas_parquet, compression = "zstd")
   message(sprintf("  Municipality betas: %s", betas_parquet))
 
@@ -768,12 +648,10 @@ run_elasticity_poverty_analysis <- function(
   readr::write_csv(bins_list$summary_tbl, bins_csv)
   message(sprintf("  Bin table: %s + csv", bins_parquet))
 
-  # ---- 7. Excel ----
   xlsx_path <- file.path(out_dir, "elasticity_summary.xlsx")
   .write_elasticity_excel(mun_betas, bins_list, bin_width,
                           time_fe_var, winsor_pct, xlsx_path)
 
-  # ---- 8. Done ----
   flag <- file.path(out_dir, ".analysis_done")
   writeLines(
     c(sprintf("betas_parquet=%s", betas_parquet),

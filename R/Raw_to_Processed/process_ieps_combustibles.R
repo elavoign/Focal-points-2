@@ -7,17 +7,11 @@ suppressPackageStartupMessages({
   library(lubridate)
 })
 
-# --------------------------------------------------------------------------
-# Helpers
-# --------------------------------------------------------------------------
-
 .parse_excel_date <- function(x) {
   n <- suppressWarnings(as.numeric(x))
   as.Date(ifelse(is.na(n), NA_real_, n), origin = "1899-12-30")
 }
 
-# Reads the CUOTAS_BASE sheet: statutory rate per year (updated Jan 1).
-# Returns a tibble: year (int) | magna_base | prem_base | diesel_base
 .read_cuotas_base <- function(xlsx_path) {
   raw <- readxl::read_excel(
     xlsx_path,
@@ -25,7 +19,7 @@ suppressPackageStartupMessages({
     col_names = FALSE,
     col_types = "text"
   )
-  # Row 1 = title, row 2 = column headers, row 3+ = data
+
   df <- raw[-(1:2), 1:4]
   names(df) <- c("year", "magna_base", "prem_base", "diesel_base")
   df |>
@@ -38,13 +32,8 @@ suppressPackageStartupMessages({
     )
 }
 
-# Reads ALL rows from the DATOS sheet (including weeks without a published
-# adjustment). Both adjusted and unadjusted rows are returned.
 .read_ieps_raw <- function(xlsx_path) {
-  # Sheet DATOS has a 2-row header:
-  #   row 1 = fuel group labels (MAGNA / PREMIUM / DIESEL / AUXILIARES)
-  #   row 2 = actual column names
-  #   row 3+ = data (Excel serial dates + numeric values)
+
   raw <- readxl::read_excel(
     xlsx_path,
     sheet     = "DATOS",
@@ -66,10 +55,6 @@ suppressPackageStartupMessages({
   df
 }
 
-# Cleans and fills missing cuotas:
-#   - Rows WITH adjustment: use the published cuota + estimulo as-is.
-#   - Rows WITHOUT adjustment (NA cuota): estimulo = 0%, cuota = cuota_base
-#     for that year from CUOTAS_BASE.
 .clean_ieps <- function(df, cuotas_base) {
   df |>
     dplyr::mutate(
@@ -87,7 +72,7 @@ suppressPackageStartupMessages({
     dplyr::mutate(year = lubridate::year(fecha_inicio)) |>
     dplyr::left_join(cuotas_base, by = "year") |>
     dplyr::mutate(
-      # Weeks without a published adjustment: estimulo = 0, cuota = base rate
+
       magna_estimulo_pct  = dplyr::if_else(is.na(magna_cuota),  0,    magna_estimulo_pct),
       magna_cuota         = dplyr::if_else(is.na(magna_cuota),  magna_base,   magna_cuota),
       prem_estimulo_pct   = dplyr::if_else(is.na(prem_cuota),   0,    prem_estimulo_pct),
@@ -102,14 +87,11 @@ suppressPackageStartupMessages({
     dplyr::arrange(fecha_inicio)
 }
 
-# Expands each decree row to one row per calendar day using fecha_fin from
-# the Excel. No LOCF: each row covers exactly [fecha_inicio, fecha_fin).
 .expand_to_daily <- function(df_clean) {
   df_clean |>
     dplyr::arrange(fecha_inicio) |>
     dplyr::mutate(
-      # Expand [fecha_inicio, fecha_fin) — fecha_fin is the exclusive end so
-      # consecutive rows share no days even when fecha_fin[i] == fecha_inicio[i+1].
+
       date = purrr::map2(fecha_inicio, fecha_fin - 1L, seq, by = "day")
     ) |>
     tidyr::unnest(date) |>
@@ -138,10 +120,6 @@ suppressPackageStartupMessages({
     ) |>
     dplyr::filter(!is.nan(ieps_magna_cuota))
 }
-
-# --------------------------------------------------------------------------
-# Main wrapper
-# --------------------------------------------------------------------------
 
 process_ieps_combustibles <- function(
   xlsx_path   = "data/raw_public/IEPS_Combustibles_Mexico.xlsx",
@@ -181,7 +159,6 @@ process_ieps_combustibles <- function(
     nrow(monthly), min(monthly$year), max(monthly$year)
   ))
 
-  # Sanity: no NA cuotas in output
   n_na <- sum(is.na(daily$magna_cuota))
   if (n_na > 0L) {
     warning(sprintf(

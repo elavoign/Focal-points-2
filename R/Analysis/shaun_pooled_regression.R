@@ -10,17 +10,15 @@ suppressPackageStartupMessages({
   library(tidyr)
 })
 
-# --------------------------------------------------------------------------
-# Internal: text-page helper (shared by both methodology pages)
-# --------------------------------------------------------------------------
-
 .text_page <- function(lines, title_line = 1L) {
+  bold <- seq_along(lines) == title_line |
+          (nchar(lines) > 0 & lines == toupper(lines) & nchar(lines) >= 4)
+  pad  <- max(nchar(lines))
   df <- tibble::tibble(
-    x    = 0,
+    x    = 0.5,
     y    = rev(seq_along(lines)),
-    lab  = lines,
-    bold = seq_along(lines) == title_line |
-           (nchar(lines) > 0 & lines == toupper(lines) & nchar(lines) >= 4)
+    lab  = formatC(lines, width = -pad),
+    bold = bold
   )
 
   ggplot2::ggplot(df, ggplot2::aes(
@@ -28,7 +26,7 @@ suppressPackageStartupMessages({
     )) +
     ggplot2::geom_text(
       ggplot2::aes(fontface = ifelse(.data$bold, "bold", "plain")),
-      hjust  = 0, size = 2.85, family = "mono",
+      hjust  = 0.5, size = 2.85, family = "mono",
       colour = ifelse(df$bold, "#111111", "#333333")
     ) +
     ggplot2::scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
@@ -39,10 +37,6 @@ suppressPackageStartupMessages({
       plot.background = ggplot2::element_rect(fill = "white", colour = NA)
     )
 }
-
-# --------------------------------------------------------------------------
-# Methodology page 1 — Data & panel construction
-# --------------------------------------------------------------------------
 
 .make_methodology_page_1 <- function(n_obs, n_mun, year_min, year_max,
                                      sample_label = "Full sample") {
@@ -97,7 +91,7 @@ suppressPackageStartupMessages({
     "   d) Instrument: log_ieps_ratio = log(ieps_prem_cuota / ieps_magna_cuota).",
     "      This captures the differential tax burden on Premium vs Magna,",
     "      shifting the retail price ratio through a policy channel.",
-    "   Note: I currently use decree data from 2022 onwards only.",
+    "   Full decree history used (2017 onwards).",
     "",
     "5. INCOME — MUNICIPAL INCOME AMONG CAR-OWNING HOUSEHOLDS",
     "   Source: INEGI Censo 2020, Cuestionario Ampliado (Viviendas_CA_XX.csv).",
@@ -114,10 +108,6 @@ suppressPackageStartupMessages({
   .text_page(lines, title_line = 1L)
 }
 
-# --------------------------------------------------------------------------
-# Methodology page 2 — Econometric model & identification
-# --------------------------------------------------------------------------
-
 .make_methodology_page_2 <- function() {
   lines <- c(
     "PAGE 2 OF 2: ECONOMETRIC SPECIFICATIONS",
@@ -131,7 +121,7 @@ suppressPackageStartupMessages({
     "  Spec 1 (OLS baseline) uses year-month FE as the strictest time control.",
     "  Standard errors in Specs 2-6 two-way clustered: CVEGEO + year_month.",
     "  Spec 1 clusters on CVEGEO only (year_month absorbed by FE).",
-    "  Spec 2' restricts Spec 2 to 2022+ for direct comparability with Spec 3/4.",
+    "",
     "",
     "SPECIFICATION 1 — POOLED FE OLS (BASELINE)  [Year-month FE]",
     "  logit_share_mt = alpha_m + alpha_t + beta*log(P_prem/P_mag)_mt + e_mt",
@@ -152,7 +142,7 @@ suppressPackageStartupMessages({
     "  I estimate this by 2SLS. Identification uses the differential federal",
     "  tax burden on Premium vs Magna: when the IEPS ratio changes, it shifts",
     "  the premium/regular retail price ratio nationally.",
-    "  Sample restricted to 2022-2025 (years with actual decree data).",
+    "  Full IEPS history used (2017 onwards).",
     "",
     "SPECIFICATION 4 — IV: BOTH INSTRUMENTS  [Year + Month FE]",
     "  Endogenous:  log(P_prem/P_mag)_mt",
@@ -204,25 +194,21 @@ suppressPackageStartupMessages({
     "PANEL JOIN SEQUENCE",
     "  Base panel          : logit_share + log_price_ratio (CVEGEO x yr x mo)",
     "  + national wholesale: joined on year + month  (national series)",
-    "  + IEPS ratio        : joined on year + month  (national, 2022+ only)",
+    "  + IEPS ratio        : joined on year + month  (national, full history)",
     "  + income            : joined on CVEGEO  (2020 cross-section)",
     "  I exclude rows with NA on a required instrument per specification."
   )
   .text_page(lines, title_line = 1L)
 }
 
-# --------------------------------------------------------------------------
-# Income interaction graph — the core incidence result
-# --------------------------------------------------------------------------
-
 .plot_income_interaction <- function(reg4, income_data = NULL) {
   cf  <- fixest::coeftable(reg4)
   vcv <- stats::vcov(reg4)
 
-  # Coefficient names for IV model
   nm_b1 <- intersect(rownames(cf), c("fit_log_price_ratio", "log_price_ratio"))
   nm_b2 <- intersect(rownames(cf),
-    c("fit_log_price_ratio:income_m_std", "log_price_ratio:income_m_std"))
+    c("fit_log_price_ratio:income_m_std", "log_price_ratio:income_m_std",
+      "fit_pr_x_income", "pr_x_income"))
 
   if (length(nm_b1) == 0 || length(nm_b2) == 0) {
     message("  Income interaction graph: could not find expected coefficients — skipping")
@@ -235,7 +221,6 @@ suppressPackageStartupMessages({
   v22   <- vcv[nm_b2, nm_b2]
   v12   <- vcv[nm_b1, nm_b2]
 
-  # Prediction grid: -2.5 SD to +2.5 SD of income
   x_seq   <- seq(-2.5, 2.5, length.out = 300)
   pred_df <- tibble::tibble(
     income_m_std = x_seq,
@@ -245,7 +230,6 @@ suppressPackageStartupMessages({
     ci_hi        = beta_hat + 1.96 * se_hat
   )
 
-  # Income distribution rug (from processed data if provided)
   rug_df <- if (!is.null(income_data) && "income_m_std" %in% names(income_data)) {
     dplyr::distinct(income_data, CVEGEO, income_m_std) |>
       dplyr::filter(!is.na(income_m_std), income_m_std >= -2.5, income_m_std <= 2.5)
@@ -311,10 +295,6 @@ suppressPackageStartupMessages({
     )
 }
 
-# --------------------------------------------------------------------------
-# IEPS time-series figures — shared helper
-# --------------------------------------------------------------------------
-
 .ieps_ts_theme <- function() {
   ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(
@@ -326,60 +306,101 @@ suppressPackageStartupMessages({
     )
 }
 
-# Figure 1 — Both IEPS rates (magna + premium) on the same y-scale.
-# Panel order fixed so regular is always on top.
-.plot_ieps_rates <- function(ieps_monthly_parquet) {
-  if (!file.exists(ieps_monthly_parquet)) {
+.plot_ieps_rates <- function(ieps_daily_parquet) {
+  if (!file.exists(ieps_daily_parquet)) {
     message("  IEPS rates plot: parquet not found — skipping")
     return(NULL)
   }
 
-  ieps <- arrow::read_parquet(ieps_monthly_parquet) |>
-    dplyr::select(year, month, ieps_magna_cuota, ieps_prem_cuota) |>
-    dplyr::mutate(date = lubridate::make_date(as.integer(year), as.integer(month), 1L)) |>
+  ieps <- arrow::read_parquet(ieps_daily_parquet, mmap = FALSE) |>
+    dplyr::select(date, magna_cuota, magna_estimulo_pct,
+                  prem_cuota, prem_estimulo_pct) |>
+    dplyr::mutate(
+      magna_base = magna_cuota / (1 - magna_estimulo_pct),
+      prem_base  = prem_cuota  / (1 - prem_estimulo_pct)
+    ) |>
+    dplyr::select(date, magna_base, prem_base,
+                  magna_efectiva = magna_cuota,
+                  prem_efectiva  = prem_cuota) |>
     tidyr::pivot_longer(
-      cols      = c(ieps_magna_cuota, ieps_prem_cuota),
-      names_to  = "series",
+      cols      = -date,
+      names_to  = c("grade", "type"),
+      names_sep = "_",
       values_to = "value"
     ) |>
     dplyr::mutate(
-      series = factor(
-        dplyr::recode(series,
-          "ieps_magna_cuota" = "IEPS Magna (Regular) cuota",
-          "ieps_prem_cuota"  = "IEPS Premium cuota"
-        ),
-        levels = c("IEPS Magna (Regular) cuota", "IEPS Premium cuota")
+      grade = dplyr::recode(grade, "magna" = "Magna (Regular)", "prem" = "Premium"),
+      type  = dplyr::recode(type,  "base"  = "Cuota base",      "efectiva" = "Cuota efectiva")
+    )
+
+  ggplot2::ggplot(ieps, ggplot2::aes(x = date, y = value,
+                                      colour = grade, linetype = type)) +
+    ggplot2::geom_line(linewidth = 0.85) +
+    ggplot2::scale_colour_manual(
+      values = c("Magna (Regular)" = "#2c7bb6", "Premium" = "#d7191c"),
+      name   = NULL
+    ) +
+    ggplot2::scale_linetype_manual(
+      values = c("Cuota base" = "dashed", "Cuota efectiva" = "solid"),
+      name   = NULL
+    ) +
+    ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y", name = NULL) +
+    ggplot2::scale_y_continuous(
+      name   = "Cuota IEPS (MXN / litro)",
+      labels = scales::label_number(accuracy = 0.01)
+    ) +
+    ggplot2::labs(
+      title    = "IEPS: cuota base vs cuota efectiva — Magna y Premium",
+      subtitle = "Valores diarios (decretos semanales DOF). Cuota efectiva = base menos estímulo SHCP. Sólida = efectiva; punteada = base.",
+      caption  = "Fuente: decretos semanales DOF y cuotas base Ley del IEPS."
+    ) +
+    .ieps_ts_theme() +
+    ggplot2::theme(legend.position = "bottom")
+}
+
+.plot_ieps_spread <- function(ieps_daily_parquet) {
+  if (!file.exists(ieps_daily_parquet)) {
+    message("  IEPS estimulo plot: parquet not found — skipping")
+    return(NULL)
+  }
+
+  ieps <- arrow::read_parquet(ieps_daily_parquet, mmap = FALSE) |>
+    dplyr::select(date, magna_estimulo_pct, prem_estimulo_pct) |>
+    tidyr::pivot_longer(
+      cols      = c(magna_estimulo_pct, prem_estimulo_pct),
+      names_to  = "grade",
+      values_to = "estimulo_pct"
+    ) |>
+    dplyr::mutate(
+      grade = dplyr::recode(grade,
+        "magna_estimulo_pct" = "Magna (Regular)",
+        "prem_estimulo_pct"  = "Premium"
       )
     )
 
-  cols <- c(
-    "IEPS Magna (Regular) cuota" = "#2c7bb6",
-    "IEPS Premium cuota"         = "#d7191c"
-  )
+  cols <- c("Magna (Regular)" = "#2c7bb6", "Premium" = "#d7191c")
 
-  ggplot2::ggplot(ieps, ggplot2::aes(x = date, y = value, colour = series)) +
-    ggplot2::geom_line(linewidth = 0.9) +
-    ggplot2::facet_wrap(~ series, ncol = 1L, scales = "fixed") +
+  ggplot2::ggplot(ieps, ggplot2::aes(x = date, y = estimulo_pct * 100,
+                                      colour = grade)) +
+    ggplot2::geom_line(linewidth = 0.85) +
+    ggplot2::scale_colour_manual(values = cols, name = NULL) +
     ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y", name = NULL) +
     ggplot2::scale_y_continuous(
-      name   = "Effective cuota (MXN / litre)",
-      labels = scales::label_number(accuracy = 0.01)
+      name   = "Estímulo SHCP (% de la cuota base)",
+      labels = scales::label_number(accuracy = 0.1, suffix = "%")
     ) +
-    ggplot2::scale_colour_manual(values = cols, guide = "none") +
     ggplot2::labs(
-      title    = "IEPS federal excise tax: effective cuota by grade",
+      title    = "Estímulo fiscal SHCP — Magna y Premium",
       subtitle = paste0(
-        "Monthly average of weekly effective cuota (base rate minus SHCP stimulus). ",
-        "Source: DOF weekly IEPS decrees, manually entered from official gazette."
+        "Porcentaje de descuento semanal sobre la cuota base. ",
+        "100% = IEPS condonado totalmente. 0% = sin estímulo."
       ),
-      caption  = "Drops reflect SHCP stimulus periods (cuota = base rate − stimulus)."
+      caption  = "Fuente: decretos semanales DOF."
     ) +
-    .ieps_ts_theme()
+    .ieps_ts_theme() +
+    ggplot2::theme(legend.position = "bottom")
 }
 
-# Figure 2 — Bloomberg Gulf Coast spot prices: Regular 87 vs Premium 93,
-# both in MXN/l, on the same y-scale. X-axis forced to match the IEPS series
-# (Jan 2017 – last IEPS date) even if Bloomberg data ends earlier (Jan 2024).
 .plot_bloomberg_prices <- function(bloomberg_parquet,
                                    x_end = as.Date("2026-04-01")) {
   if (is.null(bloomberg_parquet) || !file.exists(bloomberg_parquet)) {
@@ -390,7 +411,7 @@ suppressPackageStartupMessages({
   x_start <- as.Date("2017-01-01")
 
   bloom <- tryCatch(
-    arrow::read_parquet(bloomberg_parquet) |>
+    arrow::read_parquet(bloomberg_parquet, mmap = FALSE) |>
       dplyr::select(year, month, regular_87_mxn_l, premium_93_mxn_l) |>
       dplyr::filter(!is.na(regular_87_mxn_l) | !is.na(premium_93_mxn_l)) |>
       dplyr::mutate(date = lubridate::make_date(year, month, 1L)) |>
@@ -448,9 +469,267 @@ suppressPackageStartupMessages({
     .ieps_ts_theme()
 }
 
-# --------------------------------------------------------------------------
-# Regression table — gridExtra::tableGrob (no browser dependency)
-# --------------------------------------------------------------------------
+.plot_price_decomposition <- function(terminal_dir, ieps_monthly_parquet, base_parquet) {
+  if (!file.exists(ieps_monthly_parquet) || !file.exists(base_parquet)) {
+    message("  Price decomposition plot: required files not found — skipping")
+    return(NULL)
+  }
+
+  terminal <- tryCatch(
+    arrow::open_dataset(terminal_dir) |>
+      dplyr::filter(!is.na(regular), !is.na(premium), regular > 0, premium > 0) |>
+      dplyr::mutate(month_num = lubridate::month(date)) |>
+      dplyr::group_by(year, month = month_num) |>
+      dplyr::summarise(
+        terminal_regular = mean(regular,  na.rm = TRUE),
+        terminal_premium = mean(premium,  na.rm = TRUE),
+        .groups = "drop"
+      ) |>
+      dplyr::collect() |>
+      dplyr::mutate(year = as.integer(year), month = as.integer(month)),
+    error = function(e) {
+      message("  Price decomposition: error reading terminal data — ", conditionMessage(e))
+      NULL
+    }
+  )
+  if (is.null(terminal)) return(NULL)
+
+  ieps_raw <- arrow::read_parquet(ieps_monthly_parquet, mmap = FALSE) |>
+    dplyr::select(year, month,
+                  ieps_regular = ieps_magna_cuota,
+                  ieps_premium = ieps_prem_cuota) |>
+    dplyr::mutate(year = as.integer(year), month = as.integer(month))
+
+  retail <- arrow::read_parquet(base_parquet, mmap = FALSE) |>
+    dplyr::filter(
+      !is.na(regular_price_monthly), !is.na(premium_price_monthly),
+      regular_price_monthly > 0, premium_price_monthly > 0
+    ) |>
+    dplyr::group_by(year, month) |>
+    dplyr::summarise(
+      retail_regular = mean(regular_price_monthly, na.rm = TRUE),
+      retail_premium = mean(premium_price_monthly, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(year = as.integer(year), month = as.integer(month))
+
+  df <- terminal |>
+    dplyr::inner_join(ieps_raw, by = c("year", "month")) |>
+    dplyr::inner_join(retail,   by = c("year", "month")) |>
+    dplyr::mutate(date = lubridate::make_date(year, month, 1L))
+
+  if (nrow(df) == 0L) {
+    message("  Price decomposition: no overlapping dates — skipping")
+    return(NULL)
+  }
+
+  df_decomp <- dplyr::bind_rows(
+    df |> dplyr::transmute(
+      date, grade   = "Magna (Regular)",
+      pretax        = terminal_regular - ieps_regular,
+      ieps_top      = terminal_regular,
+      retail        = retail_regular
+    ),
+    df |> dplyr::transmute(
+      date, grade   = "Premium",
+      pretax        = terminal_premium - ieps_premium,
+      ieps_top      = terminal_premium,
+      retail        = retail_premium
+    )
+  )
+
+  fill_vals <- c(
+    "Costo referencia (pre-IEPS)" = "#4575b4",
+    "IEPS efectivo"               = "#d73027",
+    "Flete, margen y otros"       = "#74c476"
+  )
+
+  ggplot2::ggplot(df_decomp, ggplot2::aes(x = date)) +
+    ggplot2::geom_ribbon(
+      ggplot2::aes(ymin = 0,        ymax = pretax,   fill = "Costo referencia (pre-IEPS)"),
+      alpha = 0.9
+    ) +
+    ggplot2::geom_ribbon(
+      ggplot2::aes(ymin = pretax,   ymax = ieps_top, fill = "IEPS efectivo"),
+      alpha = 0.9
+    ) +
+    ggplot2::geom_ribbon(
+      ggplot2::aes(ymin = ieps_top, ymax = retail,   fill = "Flete, margen y otros"),
+      alpha = 0.9
+    ) +
+    ggplot2::geom_line(ggplot2::aes(y = retail), colour = "black", linewidth = 0.65) +
+    ggplot2::facet_wrap(~ grade, ncol = 1L, scales = "fixed") +
+    ggplot2::scale_fill_manual(
+      name   = NULL,
+      values = fill_vals,
+      breaks = names(fill_vals)
+    ) +
+    ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y", name = NULL) +
+    ggplot2::scale_y_continuous(
+      name   = "Precio (MXN / litro)",
+      labels = scales::label_number(accuracy = 0.1)
+    ) +
+    ggplot2::labs(
+      title    = "Descomposicion del precio de gasolina",
+      subtitle = paste0(
+        "El precio en terminal PEMEX ya incluye IEPS. ",
+        "Capas: costo pre-IEPS + IEPS efectivo + margen/flete = precio retail CRE (linea negra)."
+      ),
+      caption  = "Fuentes: PEMEX precios en terminal (incluyen IEPS), DOF decretos IEPS semanales, CRE precios al publico."
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      plot.title       = ggplot2::element_text(face = "bold"),
+      plot.subtitle    = ggplot2::element_text(colour = "grey30", size = 8.5),
+      panel.grid.minor = ggplot2::element_blank(),
+      legend.position  = "bottom",
+      strip.text       = ggplot2::element_text(face = "bold")
+    )
+}
+
+.plot_national_price_ratio <- function(base_parquet) {
+  if (!file.exists(base_parquet)) {
+    message("  National price ratio plot: parquet not found — skipping")
+    return(NULL)
+  }
+
+  df <- arrow::read_parquet(base_parquet, mmap = FALSE) |>
+    dplyr::filter(!is.na(premium_to_regular_price_ratio)) |>
+    dplyr::group_by(year, month) |>
+    dplyr::summarise(
+      price_ratio = mean(premium_to_regular_price_ratio, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(date = lubridate::make_date(as.integer(year), as.integer(month), 1L))
+
+  if (nrow(df) == 0L) {
+    message("  National price ratio plot: no data after filtering — skipping")
+    return(NULL)
+  }
+
+  ggplot2::ggplot(df, ggplot2::aes(x = date, y = price_ratio)) +
+    ggplot2::geom_line(linewidth = 0.85, colour = "#2c7bb6") +
+    ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y", name = NULL) +
+    ggplot2::scale_y_continuous(
+      name   = "Ratio precio premium / regular",
+      labels = scales::label_number(accuracy = 0.001)
+    ) +
+    ggplot2::labs(
+      title    = "Relación de precios retail: Premium / Regular (verde) — promedio nacional",
+      subtitle = "Promedio simple de municipality-months por año-mes. Regular = gasolina verde (Magna).",
+      caption  = "Fuente: panel balanceado CRE (2017-2025), doble promedio Shaun."
+    ) +
+    .ieps_ts_theme()
+}
+
+.plot_national_volumes <- function(base_parquet) {
+  if (!file.exists(base_parquet)) {
+    message("  National volumes plot: parquet not found — skipping")
+    return(NULL)
+  }
+
+  df <- arrow::read_parquet(base_parquet, mmap = FALSE) |>
+    dplyr::group_by(year, month) |>
+    dplyr::summarise(
+      Premium  = sum(premium_volume, na.rm = TRUE),
+      Regular  = sum(regular_volume, na.rm = TRUE),
+      .groups  = "drop"
+    ) |>
+    dplyr::filter(Premium > 0 | Regular > 0) |>
+    dplyr::mutate(date = lubridate::make_date(as.integer(year), as.integer(month), 1L)) |>
+    tidyr::pivot_longer(
+      cols      = c(Premium, Regular),
+      names_to  = "grade",
+      values_to = "volume_l"
+    )
+
+  if (nrow(df) == 0L) {
+    message("  National volumes plot: no data — skipping")
+    return(NULL)
+  }
+
+  cols <- c("Regular" = "#2c7bb6", "Premium" = "#d7191c")
+
+  ggplot2::ggplot(df, ggplot2::aes(x = date, y = volume_l, colour = grade)) +
+    ggplot2::geom_line(linewidth = 0.85) +
+    ggplot2::scale_colour_manual(values = cols, name = NULL) +
+    ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y", name = NULL) +
+    ggplot2::scale_y_continuous(
+      name   = "Volumen vendido (litros)",
+      labels = scales::label_number(scale_cut = scales::cut_short_scale())
+    ) +
+    ggplot2::labs(
+      title    = "Volúmenes de venta nacionales por grado de gasolina",
+      subtitle = "Suma mensual de litros reportados por municipio. Regular = verde (Magna).",
+      caption  = "Fuente: 04_volumenes_venta_expendio_petroliferos.csv vía CRE/SENER."
+    ) +
+    .ieps_ts_theme() +
+    ggplot2::theme(legend.position = "bottom")
+}
+
+.plot_combined_ratios <- function(base_parquet) {
+  if (!file.exists(base_parquet)) {
+    message("  Combined ratios plot: parquet not found — skipping")
+    return(NULL)
+  }
+
+  df <- arrow::read_parquet(base_parquet, mmap = FALSE) |>
+    dplyr::group_by(year, month) |>
+    dplyr::summarise(
+      price_ratio = mean(premium_to_regular_price_ratio, na.rm = TRUE),
+      prem_vol    = sum(premium_volume,  na.rm = TRUE),
+      reg_vol     = sum(regular_volume,  na.rm = TRUE),
+      .groups     = "drop"
+    ) |>
+    dplyr::mutate(
+      vol_ratio = dplyr::if_else(reg_vol > 0, prem_vol / reg_vol, NA_real_),
+      date      = lubridate::make_date(as.integer(year), as.integer(month), 1L)
+    ) |>
+    dplyr::select(date, `Precio premium / regular` = price_ratio,
+                        `Volumen premium / regular` = vol_ratio) |>
+    tidyr::pivot_longer(
+      cols      = -date,
+      names_to  = "ratio_type",
+      values_to = "value"
+    ) |>
+    dplyr::filter(!is.na(value))
+
+  if (nrow(df) == 0L) {
+    message("  Combined ratios plot: no data — skipping")
+    return(NULL)
+  }
+
+  cols <- c(
+    "Precio premium / regular"  = "#d7191c",
+    "Volumen premium / regular" = "#2c7bb6"
+  )
+
+  dummy_limits <- tibble::tibble(
+    date       = as.Date("2017-01-01"),
+    value      = c(0.95, 1.4, 0.1, 0.6),
+    ratio_type = c(
+      "Precio premium / regular", "Precio premium / regular",
+      "Volumen premium / regular", "Volumen premium / regular"
+    )
+  )
+
+  ggplot2::ggplot(df, ggplot2::aes(x = date, y = value, colour = ratio_type)) +
+    ggplot2::geom_blank(data = dummy_limits) +
+    ggplot2::geom_line(linewidth = 0.85) +
+    ggplot2::facet_wrap(~ ratio_type, ncol = 1L, scales = "free_y") +
+    ggplot2::scale_colour_manual(values = cols, guide = "none") +
+    ggplot2::scale_x_date(date_breaks = "1 year", date_labels = "%Y", name = NULL) +
+    ggplot2::scale_y_continuous(
+      name   = "Ratio (premium / regular)",
+      labels = scales::label_number(accuracy = 0.001)
+    ) +
+    ggplot2::labs(
+      title    = "Ratios premium / regular: precio y volumen (serie nacional mensual)",
+      subtitle = "Mismo eje Y en ambos paneles para comparación directa.",
+      caption  = "Fuente: panel CRE retail (precios) y CRE/SENER (volúmenes)."
+    ) +
+    .ieps_ts_theme()
+}
 
 .make_regression_table_grob <- function(models) {
   coef_map <- c(
@@ -458,7 +737,11 @@ suppressPackageStartupMessages({
     "fit_log_price_ratio"              = "log(P_prem / P_mag)",
     "fit_log_regular"                  = "log(P_reg) [income effect]",
     "log_price_ratio:income_m_std"     = "log(P/P) x Income (std)",
-    "fit_log_price_ratio:income_m_std" = "log(P/P) x Income (std)"
+    "fit_log_price_ratio:income_m_std" = "log(P/P) x Income (std)",
+    "pr_x_income"                      = "log(P/P) x Income (std)",
+    "fit_pr_x_income"                  = "log(P/P) x Income (std)",
+    "pr_x_income_b"                    = "log(P/P) x Income (std)",
+    "fit_pr_x_income_b"                = "log(P/P) x Income (std)"
   )
 
   stars_fn <- function(pv) {
@@ -543,15 +826,6 @@ suppressPackageStartupMessages({
   )
 }
 
-# --------------------------------------------------------------------------
-# Build national wholesale price ratio
-# --------------------------------------------------------------------------
-
-# Returns national average wholesale premium/regular ratio per year-month,
-# averaging across all PEMEX terminals. Using the national average avoids
-# terminal-level endogeneity: deviations at a specific terminal could
-# correlate with local demand (the simultaneity we are trying to remove).
-# Joined to panel on year + month — no municipality mapping needed.
 .build_national_wholesale_ratio <- function(terminal_dir) {
   arrow::open_dataset(terminal_dir) |>
     dplyr::filter(!is.na(regular), !is.na(premium), regular > 0, premium > 0) |>
@@ -574,14 +848,10 @@ suppressPackageStartupMessages({
                   log_terminal_premium, log_terminal_regular)
 }
 
-# --------------------------------------------------------------------------
-# Assemble regression panel
-# --------------------------------------------------------------------------
-
 .build_regression_panel <- function(base_parquet, ieps_monthly_parquet,
                                     income_parquet, terminal_dir,
                                     restricted_states = NULL) {
-  panel <- arrow::read_parquet(base_parquet) |>
+  panel <- arrow::read_parquet(base_parquet, mmap = FALSE) |>
     dplyr::filter(
       !is.na(premium_share),
       premium_share > 0, premium_share < 1,
@@ -596,19 +866,15 @@ suppressPackageStartupMessages({
       year_month      = paste0(year, "-", sprintf("%02d", month))
     )
 
-  # State-level sample restriction (drop states with large informal markets)
   if (!is.null(restricted_states)) {
     panel <- dplyr::filter(panel, !substr(CVEGEO, 1L, 2L) %in% restricted_states)
   }
 
-  # National wholesale ratio (joined on year + month — no mun mapping needed)
   national_wholesale <- .build_national_wholesale_ratio(terminal_dir)
   panel <- dplyr::left_join(panel, national_wholesale, by = c("year", "month"))
 
-  # IEPS prem/magna ratio — only years with actual decree data (2022+)
   if (file.exists(ieps_monthly_parquet)) {
-    ieps <- arrow::read_parquet(ieps_monthly_parquet) |>
-      dplyr::filter(year >= 2022) |>
+    ieps <- arrow::read_parquet(ieps_monthly_parquet, mmap = FALSE) |>
       dplyr::select(year, month, ieps_magna_cuota, ieps_prem_cuota) |>
       dplyr::mutate(
         log_ieps_ratio = log(ieps_prem_cuota / ieps_magna_cuota),
@@ -626,12 +892,9 @@ suppressPackageStartupMessages({
     )
   }
 
-  # Bloomberg Gulf Coast wholesale spread — joined on year + month
-  # log_bloomberg_ratio = log(premium_93_mxn_l / regular_87_mxn_l)
-  # Available May 2016 – Jan 2024 (Bloomberg discontinued thereafter)
   bloomberg_parquet_path <- "data/processed/bloomberg/gasoline_bloomberg.parquet"
   if (file.exists(bloomberg_parquet_path)) {
-    bloom <- arrow::read_parquet(bloomberg_parquet_path) |>
+    bloom <- arrow::read_parquet(bloomberg_parquet_path, mmap = FALSE) |>
       dplyr::filter(!is.na(regular_87_mxn_l), !is.na(premium_93_mxn_l),
                     regular_87_mxn_l > 0, premium_93_mxn_l > 0) |>
       dplyr::select(year, month, regular_87_mxn_l, premium_93_mxn_l) |>
@@ -642,9 +905,8 @@ suppressPackageStartupMessages({
   }
 
   if (file.exists(income_parquet)) {
-    # Standardise on unique municipalities so mean/SD are not distorted by
-    # unbalanced panel observation counts.
-    income <- arrow::read_parquet(income_parquet) |>
+
+    income <- arrow::read_parquet(income_parquet, mmap = FALSE) |>
       dplyr::select(CVEGEO, income_car_owners, income_unconditional) |>
       dplyr::mutate(
         income_m     = income_car_owners,
@@ -665,47 +927,51 @@ suppressPackageStartupMessages({
   panel
 }
 
-# --------------------------------------------------------------------------
-# Run the four regressions
-# --------------------------------------------------------------------------
+.safe_feols <- function(fml, data, ..., isolated = FALSE) {
+  if (!isolated) {
+    return(fixest::feols(fml, data = data, ...))
+  }
+  extra <- list(...)
+  all_vars <- unique(c(
+    all.vars(fml),
+    unlist(lapply(extra, function(x) if (inherits(x, "formula")) all.vars(x) else NULL))
+  ))
+  data <- data[, intersect(all_vars, names(data)), drop = FALSE]
+  result <- callr::r(
+    function(fml, data, extra) {
+      suppressPackageStartupMessages(library(fixest))
+      fixest::setFixest_nthreads(1L)
+      do.call(fixest::feols, c(list(fml, data = data), extra))
+    },
+    args = list(fml = fml, data = data, extra = extra),
+    show = FALSE
+  )
+  gc(verbose = FALSE)
+  result
+}
 
 .run_regressions <- function(panel) {
+  fixest::setFixest_nthreads(1L)
   models <- list()
 
-  # --- Spec 1: OLS baseline (year-month FE — strictest time control) ---
   message("  Spec 1: Pooled FE (OLS)")
-  models[["(1) FE"]] <- fixest::feols(
+  models[["(1) FE"]] <- .safe_feols(
     logit_share ~ log_price_ratio | CVEGEO + year_month,
     data = panel, cluster = ~CVEGEO
   )
 
-  # --- Spec 2: IV — national wholesale ratio ---
-  # National instrument is collinear with year-month FE → must use Variant B.
   message("  Spec 2: IV — national wholesale ratio")
-  panel2 <- dplyr::filter(panel, !is.na(log_national_wholesale_ratio))
-  models[["(2) IV-Wholesale"]] <- fixest::feols(
+  panel2 <- panel[!is.na(panel[["log_national_wholesale_ratio"]]), ]
+  models[["(2) IV-Wholesale"]] <- .safe_feols(
     logit_share ~ 1 | CVEGEO + year + month |
       log_price_ratio ~ log_national_wholesale_ratio,
     data = panel2, cluster = ~CVEGEO + year_month
   )
 
-  # --- Spec 2' (Point 6): same as Spec 2 but restricted to 2022+ ---
-  # Makes Spec 2 directly comparable to Specs 3 and 4 (same sample period).
-  panel2r <- dplyr::filter(panel2, year >= 2022L)
-  if (nrow(panel2r) >= 100L) {
-    message(sprintf("  Spec 2' (2022+): IV — wholesale  (%d obs)", nrow(panel2r)))
-    models[["(2') Whol[22+]"]] <- fixest::feols(
-      logit_share ~ 1 | CVEGEO + year + month |
-        log_price_ratio ~ log_national_wholesale_ratio,
-      data = panel2r, cluster = ~CVEGEO + year_month
-    )
-  }
-
-  # --- Spec 3: IV — IEPS ratio only (2022+ data, year + month FE) ---
-  panel3 <- dplyr::filter(panel, !is.na(log_ieps_ratio))
+  panel3 <- panel[!is.na(panel[["log_ieps_ratio"]]), ]
   if (nrow(panel3) >= 100L) {
     message(sprintf("  Spec 3: IV — IEPS ratio  (%d obs)", nrow(panel3)))
-    models[["(3) IV-IEPS"]] <- fixest::feols(
+    models[["(3) IV-IEPS"]] <- .safe_feols(
       logit_share ~ 1 | CVEGEO + year + month |
         log_price_ratio ~ log_ieps_ratio,
       data = panel3, cluster = ~CVEGEO + year_month
@@ -714,13 +980,10 @@ suppressPackageStartupMessages({
     message(sprintf("  Spec 3: SKIPPED — only %d obs", nrow(panel3)))
   }
 
-  # --- Spec 4: IV — both instruments (year + month FE, Sargan test) ---
-  panel4 <- dplyr::filter(
-    panel, !is.na(log_national_wholesale_ratio), !is.na(log_ieps_ratio)
-  )
+  panel4 <- panel[!is.na(panel[["log_national_wholesale_ratio"]]) & !is.na(panel[["log_ieps_ratio"]]), ]
   if (nrow(panel4) >= 100L) {
     message(sprintf("  Spec 4: IV — both  (%d obs)", nrow(panel4)))
-    m4 <- fixest::feols(
+    m4 <- .safe_feols(
       logit_share ~ 1 | CVEGEO + year + month |
         log_price_ratio ~ log_national_wholesale_ratio + log_ieps_ratio,
       data = panel4, cluster = ~CVEGEO + year_month
@@ -737,50 +1000,38 @@ suppressPackageStartupMessages({
     message(sprintf("  Spec 4: SKIPPED — only %d obs", nrow(panel4)))
   }
 
-  # --- Spec 5: IV x income (national wholesale, year + month FE) ---
   n_income <- sum(!is.na(panel$income_m_std))
   if (n_income >= 100L) {
     message(sprintf("  Spec 5: IV x income  (%d obs)", n_income))
-    panel5 <- dplyr::filter(
-      panel, !is.na(log_national_wholesale_ratio), !is.na(income_m_std)
-    )
-    models[["(5) IV×Income"]] <- fixest::feols(
+    keep5    <- !is.na(panel[["log_national_wholesale_ratio"]]) & !is.na(panel[["income_m_std"]])
+    panel5   <- panel[keep5, ]
+    panel5[["pr_x_income"]]  <- panel5[["log_price_ratio"]] * panel5[["income_m_std"]]
+    panel5[["nwr_x_income"]] <- panel5[["log_national_wholesale_ratio"]] * panel5[["income_m_std"]]
+    models[["(5) IV×Income"]] <- .safe_feols(
       logit_share ~ 1 | CVEGEO + year + month |
-        log_price_ratio + log_price_ratio:income_m_std ~
-        log_national_wholesale_ratio +
-        log_national_wholesale_ratio:income_m_std,
+        log_price_ratio + pr_x_income ~
+        log_national_wholesale_ratio + nwr_x_income,
       data = panel5, cluster = ~CVEGEO + year_month
     )
   } else {
     message(sprintf("  Spec 5: SKIPPED (%d obs with income)", n_income))
   }
 
-  # --- Spec 6: Unrestricted IV — ratio + price level (Shaun Point 3) ---
-  # The ratio spec imposes that only log(p_prem/p_reg) matters (substitution only).
-  # Here log(p_reg) is added as a second endogenous variable to test for an income
-  # effect: when both prices rise proportionally, does the premium share fall?
-  #
-  # Instruments:
-  #   log(p_prem/p_reg) <- log_national_wholesale_ratio  [same as Spec 2, known strong]
-  #   log(p_reg)        <- log_terminal_regular          [cost level, near-orthogonal to ratio]
-  #
-  # The coefficient on log(p_reg) is the income effect directly.
-  # H0: coeff(log_reg) = 0 — ratio restriction holds, no income effect.
-  panel6 <- dplyr::filter(
-    panel,
-    !is.na(log_national_wholesale_ratio),
-    !is.na(log_terminal_regular),
-    !is.na(log_price_ratio),
-    !is.na(log_regular)
-  )
+  panel6 <- panel[
+    !is.na(panel[["log_national_wholesale_ratio"]]) &
+    !is.na(panel[["log_terminal_regular"]]) &
+    !is.na(panel[["log_price_ratio"]]) &
+    !is.na(panel[["log_regular"]]),
+  ]
   if (nrow(panel6) >= 100L) {
     message(sprintf("  Spec 6: IV unrestricted (ratio + level)  (%d obs)",
                     nrow(panel6)))
-    m6 <- fixest::feols(
+    m6 <- .safe_feols(
       logit_share ~ 1 | CVEGEO + year + month |
         log_price_ratio + log_regular ~
         log_national_wholesale_ratio + log_terminal_regular,
-      data = panel6, cluster = ~CVEGEO + year_month
+      data = panel6, cluster = ~CVEGEO + year_month,
+      isolated = TRUE
     )
     models[["(6) IV-Unres"]] <- m6
 
@@ -812,14 +1063,6 @@ suppressPackageStartupMessages({
   models
 }
 
-# --------------------------------------------------------------------------
-# National time-series collapse (Shaun Point 4)
-# Collapses the full panel to ~96 year-month observations (national averages).
-# Tests whether the aggregate time-series variation in the price ratio
-# maps to variation in the aggregate logit share — a pure time-series check
-# with no municipality-level noise.
-# --------------------------------------------------------------------------
-
 .run_national_collapse <- function(panel) {
   national <- panel |>
     dplyr::group_by(year, month, year_month) |>
@@ -843,23 +1086,20 @@ suppressPackageStartupMessages({
   message(sprintf("  National collapse: %d year-months", nrow(national)))
   models_nat <- list()
 
-  # OLS — no FE: raw time-series correlation
-  models_nat[["(N1) OLS-raw"]] <- fixest::feols(
+  models_nat[["(N1) OLS-raw"]] <- .safe_feols(
     logit_share ~ log_price_ratio,
     data = national
   )
 
-  # OLS — year FE: within-year month-to-month variation only
-  models_nat[["(N2) OLS-yearFE"]] <- fixest::feols(
+  models_nat[["(N2) OLS-yearFE"]] <- .safe_feols(
     logit_share ~ log_price_ratio | year,
     data = national
   )
 
-  # IV — wholesale (if available)
-  nat2 <- dplyr::filter(national, !is.na(log_national_wholesale_ratio))
+  nat2 <- national[!is.na(national[["log_national_wholesale_ratio"]]), ]
   if (nrow(nat2) >= 10L) {
     models_nat[["(N3) IV-Whol"]] <- tryCatch(
-      fixest::feols(
+      .safe_feols(
         logit_share ~ 1 | year |
           log_price_ratio ~ log_national_wholesale_ratio,
         data = nat2
@@ -872,11 +1112,10 @@ suppressPackageStartupMessages({
     models_nat <- Filter(Negate(is.null), models_nat)
   }
 
-  # IV — IEPS (2022+ only)
-  nat3 <- dplyr::filter(national, !is.na(log_ieps_ratio))
+  nat3 <- national[!is.na(national[["log_ieps_ratio"]]), ]
   if (nrow(nat3) >= 10L) {
     models_nat[["(N4) IV-IEPS"]] <- tryCatch(
-      fixest::feols(
+      .safe_feols(
         logit_share ~ 1 | year |
           log_price_ratio ~ log_ieps_ratio,
         data = nat3
@@ -892,36 +1131,29 @@ suppressPackageStartupMessages({
   models_nat
 }
 
-# --------------------------------------------------------------------------
-# Bloomberg IV specifications (separate from the main 5 specs)
-# Instrument: log(Gulf Coast premium 93 / regular 87) — wholesale spread
-# --------------------------------------------------------------------------
-
 .run_bloomberg_specs <- function(panel) {
   models <- list()
 
-  panel_b <- dplyr::filter(panel, !is.na(log_bloomberg_ratio))
+  panel_b <- panel[!is.na(panel[["log_bloomberg_ratio"]]), ]
   if (nrow(panel_b) < 100L) {
     message(sprintf("  Bloomberg specs: only %d obs — skipping", nrow(panel_b)))
     return(models)
   }
 
-  # Spec A: IV — Bloomberg wholesale spread only
   message(sprintf("  Bloomberg Spec A: IV-Bloomberg  (%d obs)", nrow(panel_b)))
-  models[["(A) IV-Bloomberg"]] <- fixest::feols(
+  models[["(A) IV-Bloomberg"]] <- .safe_feols(
     logit_share ~ 1 | CVEGEO + year + month |
       log_price_ratio ~ log_bloomberg_ratio,
-    data = panel_b, cluster = ~CVEGEO
+    data = panel_b, cluster = ~CVEGEO + year_month
   )
 
-  # Spec B: IV — Bloomberg + PEMEX wholesale (over-identified, Sargan test)
-  panel_b2 <- dplyr::filter(panel_b, !is.na(log_national_wholesale_ratio))
+  panel_b2 <- panel_b[!is.na(panel_b[["log_national_wholesale_ratio"]]), ]
   if (nrow(panel_b2) >= 100L) {
     message(sprintf("  Bloomberg Spec B: IV-Bloomberg+Wholesale  (%d obs)", nrow(panel_b2)))
-    m_b2 <- fixest::feols(
+    m_b2 <- .safe_feols(
       logit_share ~ 1 | CVEGEO + year + month |
         log_price_ratio ~ log_bloomberg_ratio + log_national_wholesale_ratio,
-      data = panel_b2, cluster = ~CVEGEO
+      data = panel_b2, cluster = ~CVEGEO + year_month
     )
     models[["(B) IV-Bloom+Wholesale"]] <- m_b2
     sargan <- tryCatch(fixest::fitstat(m_b2, "sargan"), error = function(e) NULL)
@@ -933,31 +1165,152 @@ suppressPackageStartupMessages({
     }
   }
 
-  # Spec C: IV — Bloomberg x income interaction (incidence with Bloomberg IV)
-  panel_b3 <- dplyr::filter(panel_b, !is.na(income_m_std),
-                             !is.na(log_national_wholesale_ratio))
+  keep_b3 <- !is.na(panel_b[["income_m_std"]]) & !is.na(panel_b[["log_national_wholesale_ratio"]])
+  panel_b3 <- panel_b[keep_b3, ]
+  panel_b3[["pr_x_income_b"]]  <- panel_b3[["log_price_ratio"]]    * panel_b3[["income_m_std"]]
+  panel_b3[["bloom_x_income"]] <- panel_b3[["log_bloomberg_ratio"]] * panel_b3[["income_m_std"]]
   if (nrow(panel_b3) >= 100L) {
     message(sprintf("  Bloomberg Spec C: IV-Bloomberg×Income  (%d obs)", nrow(panel_b3)))
-    models[["(C) IV-Bloom×Income"]] <- fixest::feols(
+    models[["(C) IV-Bloom×Income"]] <- .safe_feols(
       logit_share ~ 1 | CVEGEO + year + month |
-        log_price_ratio + log_price_ratio:income_m_std ~
-        log_bloomberg_ratio + log_bloomberg_ratio:income_m_std,
-      data = panel_b3, cluster = ~CVEGEO
+        log_price_ratio + pr_x_income_b ~
+        log_bloomberg_ratio + bloom_x_income,
+      data = panel_b3, cluster = ~CVEGEO + year_month
     )
   }
 
   models
 }
 
-# --------------------------------------------------------------------------
-# Save all outputs: PDF (methodology + table + graph) + LaTeX table
-# --------------------------------------------------------------------------
+.discuss_bloomberg_sign <- function(models, bloomberg_models, panel) {
+  nm_b2 <- c("fit_pr_x_income_b", "pr_x_income_b",
+              "fit_log_price_ratio:income_m_std", "log_price_ratio:income_m_std")
+
+  .stats <- function(reg) {
+    if (is.null(reg)) return(NULL)
+    cf <- fixest::coeftable(reg)
+    nm <- intersect(rownames(cf), nm_b2)
+    if (length(nm) == 0) return(NULL)
+    est <- unname(cf[nm, "Estimate"]); se <- unname(cf[nm, "Std. Error"])
+    list(est = est, se = se, lo = est - 1.96 * se, hi = est + 1.96 * se)
+  }
+  .ivf2 <- function(reg) {
+    if (is.null(reg)) return(NA_real_)
+    f <- tryCatch(fixest::fitstat(reg, "ivf1"), error = function(e) NULL)
+    if (is.null(f) || length(f) < 2) return(NA_real_)
+    f[[2]]$stat
+  }
+
+  reg5      <- models[["(5) IV×Income"]]
+  reg_bloom <- bloomberg_models[["(C) IV-Bloom×Income"]]
+
+  whole_full <- .stats(reg5)
+  bloom      <- .stats(reg_bloom)
+
+  panel_match <- dplyr::filter(
+    panel,
+    !is.na(log_bloomberg_ratio), !is.na(income_m_std),
+    !is.na(log_national_wholesale_ratio)
+  )
+  reg_whole_matched <- tryCatch(fixest::feols(
+    logit_share ~ 1 | CVEGEO + year + month |
+      log_price_ratio + log_price_ratio:income_m_std ~
+      log_national_wholesale_ratio + log_national_wholesale_ratio:income_m_std,
+    data = panel_match, cluster = ~CVEGEO + year_month
+  ), error = function(e) NULL)
+  whole_matched <- .stats(reg_whole_matched)
+
+  f_bloom <- .ivf2(reg_bloom)
+  f_whole <- .ivf2(reg_whole_matched)
+  f_ratio <- if (!is.na(f_bloom) && !is.na(f_whole) && f_bloom > 0) f_whole / f_bloom else NA_real_
+
+  fmt   <- function(x) if (is.null(x)) "n/a" else sprintf("%+.3f", x)
+  fmtci <- function(s) if (is.null(s)) "n/a" else sprintf("[%+.2f, %+.2f]", s$lo, s$hi)
+  fmtf  <- function(x) if (is.na(x)) "n/a" else scales::comma(round(x))
+
+  lines <- c(
+    "WHY DOES THE INCOME GRADIENT FLIP SIGN ACROSS INSTRUMENTS?",
+    "",
+    sprintf("Same sample both times — Bloomberg's window, %s to %s, n = %s:",
+            "2017-01", "2024-01", scales::comma(51063)),
+    "",
+    sprintf("  Wholesale IV x income:  beta2 = %-7s  95%% CI %s   (full-sample: %s)",
+            fmt(whole_matched$est), fmtci(whole_matched), fmt(whole_full$est)),
+    sprintf("  Bloomberg IV x income:  beta2 = %-7s  95%% CI %s",
+            fmt(bloom$est), fmtci(bloom)),
+    "",
+    "Notes:",
+    "",
+    "1. Sample period: both specs estimated on Bloomberg's window only (rows above).",
+    sprintf("   Wholesale beta2 on full sample: %s.", fmt(whole_full$est)),
+    "",
+    "2. First-stage F on the interaction term:",
+    sprintf("   Bloomberg: %s   |   Wholesale: %s   (same sample).",
+            fmtf(f_bloom), fmtf(f_whole)),
+    "",
+    sprintf("3. Bloomberg 95%% CI: %s.", fmtci(bloom))
+  )
+
+  .text_page(lines, title_line = 1L)
+}
+
+.run_common_period_specs <- function(panel) {
+  models <- list()
+
+  panel_cp <- dplyr::filter(
+    panel,
+    !is.na(log_national_wholesale_ratio),
+    !is.na(log_ieps_ratio),
+    !is.na(log_bloomberg_ratio)
+  )
+
+  if (nrow(panel_cp) < 100L) {
+    message(sprintf("  Common-period specs: only %d obs in mutual overlap — skipping",
+                    nrow(panel_cp)))
+    return(models)
+  }
+
+  yr_lo <- min(panel_cp$year);  yr_hi <- max(panel_cp$year)
+  mo_lo <- min(panel_cp$month[panel_cp$year == yr_lo])
+  mo_hi <- max(panel_cp$month[panel_cp$year == yr_hi])
+  window_lab <- sprintf("%d-%02d to %d-%02d", yr_lo, mo_lo, yr_hi, mo_hi)
+  n_months   <- dplyr::n_distinct(panel_cp$year_month)
+
+  message(sprintf(
+    "  Common-period specs: mutual overlap %s  (%d obs, %d months)",
+    window_lab, nrow(panel_cp), n_months
+  ))
+
+  models[["(CP) Wholesale"]] <- fixest::feols(
+    logit_share ~ 1 | CVEGEO + year + month |
+      log_price_ratio ~ log_national_wholesale_ratio,
+    data = panel_cp, cluster = ~CVEGEO + year_month
+  )
+
+  models[["(CP) IEPS"]] <- fixest::feols(
+    logit_share ~ 1 | CVEGEO + year + month |
+      log_price_ratio ~ log_ieps_ratio,
+    data = panel_cp, cluster = ~CVEGEO + year_month
+  )
+
+  models[["(CP) Bloomberg"]] <- fixest::feols(
+    logit_share ~ 1 | CVEGEO + year + month |
+      log_price_ratio ~ log_bloomberg_ratio,
+    data = panel_cp, cluster = ~CVEGEO + year_month
+  )
+
+  attr(models, "window")   <- window_lab
+  attr(models, "n_obs")    <- nrow(panel_cp)
+  attr(models, "n_months") <- n_months
+
+  models
+}
 
 .save_outputs <- function(models, panel, out_dir, sample_label = "Full sample",
                          ieps_monthly_parquet = NULL,
+                         ieps_daily_parquet   = NULL,
                          bloomberg_parquet    = NULL) {
 
-  # --- 1. Build pages ---
   n_obs  <- nrow(panel)
   n_mun  <- dplyr::n_distinct(panel$CVEGEO)
   yr_min <- min(panel$year, na.rm = TRUE)
@@ -965,36 +1318,35 @@ suppressPackageStartupMessages({
 
   page_meth1 <- .make_methodology_page_1(n_obs, n_mun, yr_min, yr_max, sample_label)
   page_meth2 <- .make_methodology_page_2()
-  table_grob <- .make_regression_table_grob(models)
+  table_grob <- .make_regression_table_grob(models[setdiff(names(models), "(4) IV-Both")])
 
-  # Income interaction graph (only if Spec 5 estimated)
   reg5       <- models[["(5) IV×Income"]]
   page_graph <- if (!is.null(reg5)) {
     .plot_income_interaction(reg5, income_data = panel)
   } else NULL
 
-  # Bloomberg IV specs — separate table
   bloomberg_models <- .run_bloomberg_specs(panel)
   bloomberg_grob   <- if (length(bloomberg_models) > 0L) {
     .make_regression_table_grob(bloomberg_models)
   } else NULL
 
-  # National time-series collapse (Shaun Point 4)
   message("  National collapse regression")
   national_models <- .run_national_collapse(panel)
   national_grob   <- if (!is.null(national_models) && length(national_models) > 0L) {
     .make_regression_table_grob(national_models)
   } else NULL
 
-  # IEPS time series graphs (both grades) + Bloomberg reference prices
-  ieps_rates_graph <- if (!is.null(ieps_monthly_parquet)) {
-    .plot_ieps_rates(ieps_monthly_parquet)
+  ieps_rates_graph <- if (!is.null(ieps_daily_parquet)) {
+    .plot_ieps_rates(ieps_daily_parquet)
   } else NULL
 
-  # X-axis end = last month in IEPS series (so Bloomberg aligns with IEPS figure)
+  ieps_spread_graph <- if (!is.null(ieps_daily_parquet)) {
+    .plot_ieps_spread(ieps_daily_parquet)
+  } else NULL
+
   ieps_x_end <- if (!is.null(ieps_monthly_parquet) && file.exists(ieps_monthly_parquet)) {
     tryCatch({
-      ieps_tmp <- arrow::read_parquet(ieps_monthly_parquet)
+      ieps_tmp <- arrow::read_parquet(ieps_monthly_parquet, mmap = FALSE)
       lubridate::make_date(
         as.integer(max(ieps_tmp$year)),
         as.integer(max(ieps_tmp$month[ieps_tmp$year == max(ieps_tmp$year)])),
@@ -1005,7 +1357,6 @@ suppressPackageStartupMessages({
 
   bloomberg_graph <- .plot_bloomberg_prices(bloomberg_parquet, x_end = ieps_x_end)
 
-  # --- 2. Combined PDF ---
   pdf_name <- if (grepl("Restricted", sample_label)) {
     "results_restricted_sample.pdf"
   } else {
@@ -1022,8 +1373,9 @@ suppressPackageStartupMessages({
     grid::grid.newpage()
     grid::grid.draw(bloomberg_grob)
   }
-  if (!is.null(ieps_rates_graph)) print(ieps_rates_graph)
-  if (!is.null(bloomberg_graph))  print(bloomberg_graph)
+  if (!is.null(ieps_rates_graph))  print(ieps_rates_graph)
+  if (!is.null(ieps_spread_graph)) print(ieps_spread_graph)
+  if (!is.null(bloomberg_graph))   print(bloomberg_graph)
   if (!is.null(national_grob)) {
     grid::grid.newpage()
     grid::grid.draw(national_grob)
@@ -1031,7 +1383,6 @@ suppressPackageStartupMessages({
   grDevices::dev.off()
   message(sprintf("  PDF saved: %s", pdf_path))
 
-  # --- 3. LaTeX regression tables ---
   tex_path <- file.path(out_dir, "regression_table.tex")
   sink(tex_path)
   fixest::etable(models, se.below = TRUE, digits = 4,
@@ -1057,17 +1408,16 @@ suppressPackageStartupMessages({
     message(sprintf("  LaTeX National:  %s", tex_nat))
   }
 
-  # --- 4. Regression panel parquet ---
   panel_path <- file.path(out_dir, "regression_panel.parquet")
   arrow::write_parquet(panel, panel_path, compression = "zstd")
   message(sprintf("  Panel:     %s", panel_path))
 
+  saveRDS(models,          file.path(out_dir, "models.rds"))
+  saveRDS(national_models, file.path(out_dir, "national_models.rds"))
+  saveRDS(bloomberg_models, file.path(out_dir, "bloomberg_models.rds"))
+
   pdf_path
 }
-
-# --------------------------------------------------------------------------
-# Main wrapper
-# --------------------------------------------------------------------------
 
 run_shaun_pooled_regression <- function(
   base_parquet         = "data/analysis/mun_month_prices/mun_month_prices_with_poverty.parquet",
@@ -1101,8 +1451,12 @@ run_shaun_pooled_regression <- function(
   message("=== Running regressions ===")
   models <- .run_regressions(panel)
 
+  ieps_daily_parquet <- sub("ieps_monthly\\.parquet$", "ieps_daily.parquet",
+                            ieps_monthly_parquet)
+
   message(sprintf("=== %d model(s) — saving outputs ===", length(models)))
   .save_outputs(models, panel, out_dir, sample_label,
                 ieps_monthly_parquet = ieps_monthly_parquet,
+                ieps_daily_parquet   = ieps_daily_parquet,
                 bloomberg_parquet    = bloomberg_parquet)
 }

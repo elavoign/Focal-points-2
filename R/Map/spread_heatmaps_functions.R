@@ -1,5 +1,3 @@
-# R/Map/spread_heatmaps_functions.R
-
 suppressPackageStartupMessages({
   library(dplyr)
   library(sf)
@@ -7,15 +5,11 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(stringr)
   library(scales)
-  library(grid)   # for unit()
+  library(grid)
 })
 
-# ---------------------------
-# Helpers
-# ---------------------------
-
 read_prepost_cvegeo <- function(prepost_parquet) {
-  df <- arrow::read_parquet(prepost_parquet) %>% as_tibble()
+  df <- arrow::read_parquet(prepost_parquet, mmap = FALSE) %>% as_tibble()
   if (!("CVEGEO" %in% names(df))) stop("prepost_cvegeo parquet missing column CVEGEO")
   if (!("period" %in% names(df))) stop("prepost_cvegeo parquet missing column period (pre/post)")
   df %>% mutate(CVEGEO = stringr::str_pad(as.character(CVEGEO), 5, pad = "0"))
@@ -84,7 +78,6 @@ period_title <- function(kind, reform_date = "2025-03-03", window_months = 1L) {
   kind
 }
 
-# kept for compatibility (unused if range is fixed)
 compute_global_abs_limit <- function(df_prepost, vars) {
   df_pre  <- df_prepost %>% filter(period == "pre")
   df_post <- df_prepost %>% filter(period == "post")
@@ -146,10 +139,6 @@ plot_municipio_choropleth <- function(sf_mun, df_vals, title, subtitle, out_path
   ggsave(filename = out_path, plot = p, width = 10.5, height = 7.2, dpi = 240)
   out_path
 }
-
-# ---------------------------
-# Main builder
-# ---------------------------
 
 make_maps_cvegeo_one_spread <- function(
   df_prepost,
