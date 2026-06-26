@@ -223,7 +223,7 @@ make_station_spread_distributions_all <- function(prepost_station_parquet,
   ensure_dir(file.path(out_dir, "overlay"))
   ensure_dir(file.path(out_dir, "diff"))
 
-  df <- arrow::read_parquet(prepost_station_parquet) %>% as_tibble(, mmap = FALSE)
+  df <- arrow::read_parquet(prepost_station_parquet) %>% as_tibble()
 
   if (!("period" %in% names(df))) stop("Station pre/post parquet missing 'period' column.")
   if (!("station_id" %in% names(df))) stop("Station pre/post parquet missing 'station_id' column.")
@@ -326,7 +326,7 @@ make_station_price_distributions_all <- function(prepost_station_price_parquet,
   ensure_dir(file.path(out_dir, "overlay"))
   ensure_dir(file.path(out_dir, "diff"))
 
-  df <- arrow::read_parquet(prepost_station_price_parquet) %>% as_tibble(, mmap = FALSE)
+  df <- arrow::read_parquet(prepost_station_price_parquet) %>% as_tibble()
 
   if (!("period" %in% names(df))) stop("Station price pre/post parquet missing 'period' column.")
   if (!("station_id" %in% names(df))) stop("Station price pre/post parquet missing 'station_id' column.")
@@ -416,7 +416,7 @@ make_terminal_int_distributions <- function(prepost_terminal_parquet,
   ensure_dir(file.path(out_dir, "overlay"))
   ensure_dir(file.path(out_dir, "diff"))
 
-  df <- arrow::read_parquet(prepost_terminal_parquet) %>% as_tibble(, mmap = FALSE)
+  df <- arrow::read_parquet(prepost_terminal_parquet) %>% as_tibble()
 
   if (!("period" %in% names(df))) stop("Terminal pre/post parquet missing 'period' column.")
   if (!("terminal_id" %in% names(df))) stop("Terminal pre/post parquet missing 'terminal_id' column.")
@@ -515,7 +515,7 @@ make_station_price_quantile_overlays <- function(station_quantiles_parquet,
                                                  window_months = 1L) {
   ensure_dir(out_dir)
 
-  df <- arrow::read_parquet(station_quantiles_parquet) %>% as_tibble(, mmap = FALSE)
+  df <- arrow::read_parquet(station_quantiles_parquet) %>% as_tibble()
 
   needed <- c("station_id", "price_pre", "price_post", "quantile_label", "price_var")
   miss <- setdiff(needed, names(df))

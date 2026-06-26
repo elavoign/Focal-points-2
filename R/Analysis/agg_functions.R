@@ -49,7 +49,7 @@ agg_daily_cvegeo_one_year <- function(in_parquet, year, out_dir) {
   out <- file.path(out_dir, sprintf("year=%d", year), "daily_cvegeo.parquet")
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
 
-  df <- arrow::read_parquet(in_parquet) |> as_tibble(, mmap = FALSE)
+  df <- arrow::read_parquet(in_parquet) |> as_tibble()
 
   if (!"date" %in% names(df) && "Fecha" %in% names(df)) {
     df <- df |> rename(date = Fecha)

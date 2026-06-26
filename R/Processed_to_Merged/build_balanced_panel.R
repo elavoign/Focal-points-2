@@ -124,8 +124,6 @@ build_balanced_panel_year <- function(year,
     ))
   }
 
-  n_original <- sum(!balanced$is_obs)
-
   n_synthetic  <- sum(!balanced$is_obs)
   n_carry      <- sum(balanced$flag_carry_forward)
   n_stale      <- sum(balanced$flag_stale_over_60d)
